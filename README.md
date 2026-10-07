@@ -15,15 +15,18 @@ this kit covers the first one.
 
 | Phase | What happens | Status |
 |---|---|---|
-| 1. Prepare | Separation and extraction. The module stays an art module and must give identical art output before and after. The agent also writes a binding plan. | **This kit** |
+| 1. Prepare | Separation and extraction, made in a local worktree. The module stays an art module and must give identical art output before and after. The agent also writes a binding plan. | **This kit** |
 | 2. Bind | Write Phlex plugins from the binding plans and compare Phlex output with art output. | Later, once Phlex can run DUNE workflows |
 | 3. Retire | Remove the art module. | Later |
 
 DUNE's Phlex-era code goes into new repositories under `DUNE/`, split by subsystem:
 `dunecore` becomes `dune-core` (with `dune-geo-utils` and `dune-utils`), `dunereco` becomes
-`dune-fd-reco` and the protoDUNE repositories, and so on. Phase 1 still changes the current
-repositories, because the module must keep running in art. The binding plan records where
-each extracted piece will live and which `dunecore` dependencies must move first.
+`dune-fd-reco` and the protoDUNE repositories, and so on. The kit makes and checks each
+extraction in a local worktree of the current repository, because only art can run the
+before-and-after comparison today. Where the result then lands is **to be decided** by the DUNE
+Software Lead and Code Management; see [Where the change goes](#where-the-change-goes). The binding plan
+records where each extracted piece would live and which `dunecore` dependencies must move
+first.
 `skills/art-phlex-extract/references/dune-repo-map.md` has the mapping guide.
 
 Phase 1 is worth doing now because it can be checked today. Each module still runs in art, so
@@ -140,6 +143,30 @@ Generated-by: Claude Code (Opus 5.5)          last line of each commit message
 
 Use `Assisted-by` / `🤖 Assisted By` instead when you wrote or substantially reworked the
 change. Do not use `Co-Authored-By` for an AI tool.
+
+## Where the change goes
+
+**To be decided.** A run ends with uncommitted changes in a local worktree of the art-era
+repository and the reports in `runs/<repo>-<Module>/`. Whether those changes go anywhere,
+and where, is a decision for the DUNE Software Lead and Code Management, not for the person running the kit.
+The options are:
+
+- **the Phlex-era repository only** (for example `DUNE/dune-pd-hd`): copy the
+  framework-free algorithm and its tests there, and leave the art-era repository unchanged.
+  This is the current leaning.
+- **the art-era repository** (for example `dunereco`): a pull request with the thinner module
+  and the algorithm, so the art module itself uses the extracted code.
+- **neither yet**: keep the patch and the notes until phase 2.
+
+Until they decide, do not open pull requests from a run. The manager's
+hand-off ends with a **Where the change goes** section: the Phlex-era home from the binding
+plan, the commands for each option, and the dependencies that must move first, all marked as
+waiting for that decision. The agents never run those commands. Building, the unit tests and
+the art comparison are still worth doing in the worktree, because they are how you know the
+extraction is right wherever it ends up.
+
+This stays manual until they are happy to automate it. When that changes, this
+section and the manager skill will say so.
 
 ## Models and cost
 

@@ -122,7 +122,8 @@ less than finding it halfway through the edit. Follow the guide's pattern
 Sketch the Phlex nodes in notes section 7 with `references/binding-crosswalk.md`. Plan only.
 For a DUNE module, also name the Phlex-era repository each piece moves to and list every
 include from a DUNE art-era repository as a dependency with its own future home
-(`references/dune-repo-map.md`). The extraction itself still goes into the art-era repository.
+(`references/dune-repo-map.md`). The extraction itself is made in the art-era worktree; where it lands afterwards is a
+decision for the DUNE Software Lead and Code Management, not yours.
 
 ### 4. Separation edits in the module
 

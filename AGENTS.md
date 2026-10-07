@@ -30,8 +30,10 @@ before Phlex can run the experiment's workflows.
 
 ## Phases
 
-This kit is phase 1: separation, extraction, and a written binding plan. The module stays an
-art module, in its current repository. DUNE's Phlex-era code will live in new repositories
+This kit is phase 1: separation, extraction, and a written binding plan. The work is done
+and checked in a local worktree of the module's current repository, and the module stays an
+art module there. Where the result lands (the art-era repository, the Phlex-era repository, or neither yet) is to be decided by the DUNE Software Lead and Code Management. Agents never commit, push or open pull requests in
+either. DUNE's Phlex-era code will live in new repositories
 (`dunecore` to `dune-core`, `dunereco` to `dune-fd-reco` and others); the binding plan names
 the new home and the dependencies that must move first
 (`skills/art-phlex-extract/references/dune-repo-map.md`). Binding (writing Phlex plugins and running the algorithm under Phlex) is a later

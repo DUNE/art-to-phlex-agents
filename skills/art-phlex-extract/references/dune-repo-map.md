@@ -14,9 +14,10 @@ the Phlex Integration WG decide where code actually goes.
 
 ## What this changes in phase 1
 
-- **Code still goes into the art-era repository.** Phase 1 keeps the module an art module
-  that builds with the current release, so the extraction is a branch of `dunereco`,
-  `dunecore` and so on, as before.
+- **The work is done in an art-era worktree.** Phase 1 keeps the module an art module that
+  builds with the current release, so the extraction is made and checked on a local branch
+  of `dunereco`, `dunecore` and so on. Where it lands afterwards (the Phlex-era repository,
+  the art-era repository, or neither yet) is to be decided by the DUNE Software Lead and Code Management.
 - **The binding plan names the Phlex-era home** of each extracted piece: one repository from
   the table, or two candidates and the question that decides between them.
 - **Dependencies are recorded with their homes.** Every header the algorithm files include
