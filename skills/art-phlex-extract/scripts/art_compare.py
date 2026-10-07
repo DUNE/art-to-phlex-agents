@@ -33,7 +33,22 @@ sys.dont_write_bytecode = True
 # ------------------------------------------------------------------------------ wrap
 
 
+_FHICL_UNSAFE = re.compile(r'["\n\r]')
+_FHICL_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_.\[\]]*$")
+
+
+def _safe(what: str, value: str) -> str:
+    """Refuse values that could close a string or start a new FHiCL statement."""
+    if _FHICL_UNSAFE.search(value):
+        sys.exit(f"{what} must not contain quotes or newlines: {value!r}")
+    return value
+
+
 def wrap(args: argparse.Namespace) -> int:
+    _safe("job", args.job)
+    _safe("--prefix", args.prefix)
+    if not _FHICL_NAME.match(args.output_label):
+        sys.exit(f"--output-label must be a FHiCL name: {args.output_label!r}")
     lines = [
         f'#include "{args.job}"',
         "",
@@ -48,6 +63,8 @@ def wrap(args: argparse.Namespace) -> int:
         key, sep, value = item.partition("=")
         if not sep or not key:
             sys.exit(f"--set expects KEY=VALUE, got {item!r}")
+        if not _FHICL_NAME.match(key) or re.search(r"[\n\r]", value):
+            sys.exit(f"--set KEY must be a FHiCL name and VALUE one line, got {item!r}")
         lines.append(f"{key}: {value}")
     print("\n".join(lines))
     return 0

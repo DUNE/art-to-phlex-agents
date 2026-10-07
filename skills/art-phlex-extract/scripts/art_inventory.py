@@ -56,9 +56,13 @@ def read_source(spec: str, repo: str | None = None) -> str:
         )
         if result.returncode != 0:
             sys.exit(f"git show {rev}:{path} failed: {result.stderr.strip()}")
+        if len(result.stdout) > MAX_SOURCE_BYTES:
+            sys.exit(f"{spec}: larger than {MAX_SOURCE_BYTES} bytes; not read")
         return result.stdout
     if repo and not os.path.isabs(spec) and not os.path.exists(spec):
         spec = os.path.join(repo, spec)
+    if not os.path.isfile(spec):
+        sys.exit(f"{spec}: not a regular file; not read")
     if os.path.getsize(spec) > MAX_SOURCE_BYTES:
         sys.exit(f"{spec}: larger than {MAX_SOURCE_BYTES} bytes; not read")
     with open(spec, encoding="utf-8", errors="replace") as fh:
