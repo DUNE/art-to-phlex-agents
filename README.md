@@ -6,6 +6,26 @@ toward [Phlex](https://github.com/Framework-R-D/phlex). The method follows the P
 with Claude Code, Codex, Antigravity (agy) and any other tool that reads `AGENTS.md` and agent
 skills.
 
+> [!WARNING]
+> **Experimental.** This kit is a tool of the DUNE Phlex Adoption Working Group. It is not a
+> product of the Phlex team and not yet an agreed DUNE workflow. No extraction made with it
+> has been built or run in a release yet. The agents' reviews are reviews, not validation:
+> you are responsible for any change you take from a run, and only your own build, unit
+> tests and before-and-after comparison count as evidence that it is right.
+
+## Before you start
+
+- **Your code goes to an AI provider.** The agents send the source they read to the model
+  provider (Anthropic for Claude Code, OpenAI for Codex, Google for Antigravity). Use the kit
+  only on code you may share that way. DUNE's public repositories are fine. Do not point it at
+  unreleased or private code, or at directories that hold credentials, without checking first.
+- **Follow the collaboration's AI guidance** and disclose AI help on every commit and pull
+  request, as described under [How a run works](#how-a-run-works).
+- **You need your own access** to one of the supported tools (a subscription or an API key).
+  A run on a small module costs a few dollars; see [Models and cost](#models-and-cost).
+- **Questions and problems:** open an issue in this repository, or raise it with the Phlex
+  Adoption Working Group.
+
 ## Where this fits
 
 The guide describes three stages: **separation** (confine art code to the module boundary),
@@ -225,8 +245,14 @@ machines, see [Where to run it](#where-to-run-it).
 
 - The scripts use regular expressions. They point at lines worth reading and can miss
   unusual code. A clean result means nothing obvious was found.
-- A review without a compiler can miss errors that a compiler would catch. Build before you
-  merge.
+- A review without a compiler can miss errors that a compiler would catch. Build and test
+  before you use a result anywhere.
+- The agents can be wrong in ways that look convincing: a confident report, a wrong number,
+  a claim about an API that does not hold. The examples show each of these and how a second
+  agent or a human caught it. Read the reports critically.
+- Tested so far on two `dunereco` modules (`DisambigFromSpacePoints` twice,
+  `NumberOfHitsFilter` once), all in Claude Code, with Opus as extractor and verifier in the
+  recent runs. Other tools and models follow the same instructions but have not been tried.
 - The guide is v0.1.alpha and parts of the Phlex API are still marked experimental. `NOTICE.md`
   records the guide commit the references come from.
 
@@ -267,9 +293,26 @@ the pull request, as above. When the guide or Phlex changes, update
 `maintainers/agents/` help with that: `docs-writer` keeps this README in step with the
 skills, and `security-auditor` reviews the scripts and `install.sh` before a release.
 
-## Licence and credits
+## Copyright and licensing
 
-Apache License 2.0, see `LICENSE`. The references quote and condense *Migrating to Phlex* and
-its GausHitFinder example, written by the Phlex team at Fermilab under the same licence. See
-`NOTICE.md`. The approach builds on work by Eric Church, Chris Jackson and colleagues at PNNL,
-who used AI agents to refactor LArSoft's hit finder.
+Copyright © 2026 FERMI NATIONAL ACCELERATOR LABORATORY for the benefit of the DUNE
+Collaboration.
+
+This repository, and all software contained within, except where noted in `NOTICE.md`, is
+licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+except in compliance with the License. You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Copyright is granted to FERMI NATIONAL ACCELERATOR LABORATORY on behalf of the Deep
+Underground Neutrino Experiment (DUNE). Unless required by applicable law or agreed to in
+writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+## Credits
+
+The references quote and condense *Migrating to Phlex* and its GausHitFinder example, written
+by the Phlex team at Fermilab under the same licence; see `NOTICE.md`. The approach builds on
+work by Eric Church, Chris Jackson and colleagues at PNNL, who used AI agents to refactor
+LArSoft's hit finder.

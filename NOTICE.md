@@ -30,5 +30,6 @@ patches and notes are modified from that source.
 
 Everything else in this repository (workflow, skills text outside quoted passages,
 `references/larsoft-boundary-patterns.md`, scripts, templates, agent definitions) was written
-for this kit and is released under the Apache License, Version 2.0. The full licence text is
+for this kit. It is Copyright © 2026 FERMI NATIONAL ACCELERATOR LABORATORY for the benefit of
+the DUNE Collaboration, and released under the Apache License, Version 2.0. The full licence text is
 in `LICENSE`.
