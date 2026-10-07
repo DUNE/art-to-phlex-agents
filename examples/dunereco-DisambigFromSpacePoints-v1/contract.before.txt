@@ -1,0 +1,13 @@
+base art::EDProducer
+callback produce
+declare_products recob::HitCollectionCreator(producesCollector(),"",true,false)
+module DisambigFromSpacePoints
+param Atom<art::InputTag> "HitModuleLabel"
+param Atom<art::InputTag> "SpModuleLabel"
+param Atom<bool> "MonitoringPlots"
+param Atom<bool> "UseNeighbors"
+param Atom<float> "MaxDistance"
+param Atom<size_t> "NumNeighbors"
+param Atom<std::string> "MoveLeftovers"
+param Sequence<size_t> "ExcludeTPCs"
+produces <art::Assns<recob::Hit,recob::SpacePoint>>()
