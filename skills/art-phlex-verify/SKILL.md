@@ -29,6 +29,10 @@ is unset or `$KIT/AGENTS.md` does not exist, stop and say so; do not guess a pat
   `~/.cache/rattler` (pixi/conda). Record which version you read and whether it matches what
   the repository builds against. When a header cannot be found, label the API use an
   "unverified assumption" instead of asserting it is right or wrong.
+- **Compute numbers; do not work them out in your head.** Any value you state that comes from
+  arithmetic (scaled limits, index offsets, bit widths, truncation results) must come from a
+  command such as `python3 -c 'print(int(19530*5859/6000))'`, quoted in the report next to
+  the value. Mirror the C++ types: integer division, truncation and unsigned wrap-around.
 - **Understand the original before reading the notes.** Anchoring on the extractor's
   narrative is how reviews miss things.
 - Write only `VERIFICATION.md` (and scratch files outside the working tree).
