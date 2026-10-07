@@ -178,7 +178,8 @@ session, so it uses whatever model you started with.
 | Manager | your session | Opus in every run so far |
 | Extractor | `opus` | Sonnet needed two verifier rounds on the v0 example; Opus passed in one on v1 and on `NumberOfHitsFilter` |
 | Verifier | `opus` | caught 8 of 8 planted bugs; made one arithmetic slip, which the tester caught |
-| Reviewer | `opus` | found a real bug in the tests; no defects in either extraction |
+| Reviewer, extraction | `opus` | no defects in either extraction; Sonnet not tried yet |
+| Reviewer, tests | `sonnet` (the manager starts it on Sonnet) | Opus found a real bug in the tests on the dry run; Sonnet not tried yet |
 | Tester | `sonnet` | 25 traced test values, and caught the verifier's slip |
 
 Only Opus has been tried for the extractor and the verifier. The verifier is meant to be
@@ -200,8 +201,8 @@ commit is Opus and the tests commit is Sonnet.
 17 minutes of model time and 27 minutes in total, and used about 5 USD at API prices: 4.46 USD
 of Opus and 0.54 USD of Sonnet. On a subscription it used about a third of one five-hour
 usage window. A larger module, or one that needs a second round, costs more. Opus did most
-of the spending, so a Sonnet manager or a Sonnet reviewer for the tests is the first saving
-to try. Neither has been tested yet.
+of the spending. The test review now runs on Sonnet; that run used Opus for it, so expect a
+little less. A Sonnet reviewer for the extraction is the next saving to test.
 
 ## Safety
 

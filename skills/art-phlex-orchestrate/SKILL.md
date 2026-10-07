@@ -63,7 +63,10 @@ can, and keep the extractor's reasoning out of the verifier's context.
    `fix first` verdict goes back to the extractor like a verifier major, then re-verify.
 7. **Test.** After the reviewer says `ship`, give the tester (`phlex-tester`) the same
    inputs. It writes characterization unit tests with expected values traced from the
-   original module, and `TESTS.md`. Then give the reviewer the new test files to review.
+   original module, and `TESTS.md`. Then give the reviewer the new test files to review,
+   starting it on the `sonnet` model for this review (in Claude Code, pass the model when
+   you start the subagent). The extraction review in step 6 keeps the reviewer's default
+   model. Record both models in the hand-off.
    A `fix first` on the tests goes back to the tester, and the reviewer then reviews the
    fix, however small it looks. Do not approve a fix yourself in place of the reviewer.
    A test the tester could not trace, or a case where its trace disagrees with the
