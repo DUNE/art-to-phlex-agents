@@ -51,6 +51,11 @@ the Phlex Integration WG decide where code actually goes.
 Rows marked "open question", and any module whose production jobs span far detector and
 protoDUNE, go to the human with the candidates.
 
+A module that more than one protoDUNE runs, and no far detector job, has no agreed home yet.
+Record it as `ambiguous: dune-pd-hd / dune-pd-vd` (list the prototypes whose jobs run it) and
+do not pick one. The Phlex Adoption WG decides where shared protoDUNE code goes; update this
+paragraph when it does.
+
 ## How to find which detectors use a module
 
 Grep the production configurations for the module's prolog names, as in `art-phlex-extract`
