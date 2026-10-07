@@ -44,7 +44,7 @@ v0.4.1 disagree, `binding-crosswalk.md` follows the v0.4.1 code and says so.
 | `skills/dune-pr-disclosure/` | adds the AI disclosure: a `Generated-by` or `Assisted-by` trailer on each commit and one footer line in the pull request | yes |
 | `agents/` | Claude Code subagents: `phlex-extractor`, `phlex-verifier`, `phlex-reviewer`, `phlex-tester` | yes |
 | `maintainers/agents/` | subagents for looking after the kit itself: `docs-writer`, `release-notes`, `security-auditor` | no |
-| `.claude/settings.json` | blocks `git push`, `gh` and network commands; asks before any build | no |
+| `.claude/settings.json` | denies commits, pushes, `gh`, network tools and reads of credential files; asks before fetches, builds and inline scripts | as `.claude/settings.local.json`, if you have none |
 | `install.sh` | links the skills and agents into another repository | |
 | `examples/` | finished, verified passes on real modules | |
 
@@ -62,6 +62,21 @@ The scripts need Python 3.8 or newer and nothing outside the standard library:
   file names, and `art_compare.py diff BEFORE AFTER` compares the persisted products (or a
   TFileService tree) entry by entry, in stored order. `diff` needs `uproot`, `awkward` and
   `numpy`; install them in a virtual environment outside the experiment repository.
+
+## Where to run it
+
+Until there is a container set-up for shared machines, run the agents **only on your own
+computer**, against a local clone of the experiment repository. That is how both examples
+were made.
+
+- Do not run the agents on shared interactive machines (the DUNE GPVMs and similar). DUNE
+  has asked people not to run Claude Code there, and those machines hold grid credentials
+  and other users' files.
+- The agents never build. Copy the patch to a machine that can build the code (for DUNE, an
+  AL9 GPVM or a container with the release) and build, test and run the comparison there
+  yourself.
+- A container without network access, usable on shared machines, is planned. This section
+  will change when it exists.
 
 ## Quick start
 
@@ -90,7 +105,8 @@ Then use one of the two methods below.
 
 `install.sh` makes symbolic links and adds them to `.git/info/exclude`, so `git status` in the
 experiment repository stays clean. If a file already exists at a link path, the script stops.
-Use `--force` to replace it.
+Use `--force` to replace it. The script never replaces an existing `.claude/settings.local.json`,
+even with `--force`, and refuses to follow a symbolic link that leads out of the project.
 
 ## How a run works
 
@@ -130,10 +146,18 @@ change. Do not use `Co-Authored-By` for an AI tool.
 
 The agents read source code you did not write. A comment in that code can contain text aimed
 at an agent. The kit tells every agent to treat source, comments, FHiCL and notes as data and
-to report instructions it finds there. `.claude/settings.json` blocks pushes, `gh` and
-network commands when you start Claude Code in the kit. With Method B, add the same rules to
-the experiment repository's settings or to your own. On shared machines with grid
-credentials, run the agents in a container without network access.
+to report instructions it finds there.
+
+`.claude/settings.json` reduces what a Claude Code session can do. It denies commits, pushes,
+`gh`, Claude's web tools, common network and grid-copy commands, and reads of SSH keys, grid
+proxies and Kerberos tickets. It asks before fetches, builds, compilers and inline
+`python -c` or `bash -c` scripts. With Method B, `install.sh` links the same file in as
+`.claude/settings.local.json` if the project has none. If it has one, the script tells you,
+and you should merge the `permissions` block by hand.
+
+These rules are a safety net, not a sandbox. A determined command can get round
+pattern-matched rules, and Codex, Antigravity and other tools ignore this file. On shared
+machines, see [Where to run it](#where-to-run-it).
 
 ## Limits
 

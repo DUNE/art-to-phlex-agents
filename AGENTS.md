@@ -71,9 +71,11 @@ reach a session started inside an experiment repository after `install.sh`.
   `// PHLEX-TRANSITIONAL: <reason>` and is listed in the notes.
 - **Nothing event-scoped outlives the event**: no `art::Handle` members, no cached products.
 - **The human sets the build policy.** Without explicit permission, agents do not compile.
-  In Claude Code, the kit's `.claude/settings.json` enforces this: it denies `git commit`,
-  `git push`, `gh`, and network tools, and asks before build tools (`make`, `cmake`, `mrb`,
-  `spack`, compilers). Other tools rely on the instructions alone.
+  In Claude Code, the kit's `.claude/settings.json` backs this up: it denies `git commit`,
+  `git push`, `gh`, network tools and reads of credential files, and asks before fetches,
+  build tools (`make`, `cmake`, `ctest`, `mrb`, `spack`, compilers) and inline scripts. The
+  rules are pattern matches, not a sandbox. Do not look for ways round them; ask the human.
+  Other tools rely on the instructions alone.
 - **Output locations.** `runs/` is scratch output and is gitignored; curated, verified passes
   go to `examples/`.
 
