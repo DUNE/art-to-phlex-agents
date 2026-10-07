@@ -1,0 +1,927 @@
+diff --git a/dunereco/HitFinderDUNE/DisambigFromSpacePointsAlg.cxx b/dunereco/HitFinderDUNE/DisambigFromSpacePointsAlg.cxx
+new file mode 100644
+index 00000000..13a4f755
+--- /dev/null
++++ b/dunereco/HitFinderDUNE/DisambigFromSpacePointsAlg.cxx
+@@ -0,0 +1,289 @@
++#include "dunereco/HitFinderDUNE/DisambigFromSpacePointsAlg.h"
++
++#include <algorithm>
++#include <cmath>
++// PHLEX-TRANSITIONAL: logging
++#include "messagefacility/MessageLogger/MessageLogger.h"
++// ^ mf::LogWarning calls below stay inline in the algorithm (see
++// references/larsoft-boundary-patterns.md, "Logging and exceptions");
++// Phlex has not settled on a logging facility. See MIGRATION_NOTES.md
++// section 6.
++
++namespace dune {
++
++  std::unordered_map<size_t, size_t> BuildSpacePointToTPCMap(
++    std::vector<std::vector<recob::Hit const*>> const& hitsPerSpacePoint)
++  {
++    // map induction spacepoints to TPC by collection hits
++    std::unordered_map<size_t, size_t> spToTPC;
++    for (size_t i = 0; i < hitsPerSpacePoint.size(); ++i)
++    {
++        auto const& hits = hitsPerSpacePoint[i];
++        size_t tpc = geo::WireID::InvalidID;
++        for (const auto & h : hits) // find Collection hit, assume one is enough
++        {
++            if (h->SignalType() == geo::kCollection) { tpc = h->WireID().TPC; break; }
++        }
++        if (tpc == geo::WireID::InvalidID)
++        {
++          //mf::LogWarning("DisambigFromSpacePoints") << "No collection hit for this spacepoint.";
++            continue;
++        }
++        for (const auto & h : hits) // set mapping for Induction hits
++        {
++            if (h->SignalType() == geo::kInduction) { spToTPC[i] = tpc; }
++        }
++    }
++    return spToTPC;
++  }
++
++  int RunOnSpacePoints(geo::WireReadoutGeom const& wireReadout,
++                       std::vector<recob::Hit> const& eventHits,
++                       std::vector<std::vector<recob::SpacePoint const*>> const& spacePointsPerHit,
++                       std::vector<std::vector<size_t>> const& spKeysPerHit,
++                       std::unordered_map<size_t, size_t> const& spToTPC,
++                       std::unordered_map<size_t, geo::WireID>& assignments,
++                       cryo_tpc_plane_keymap& indHits,
++                       std::vector<size_t>& unassigned,
++                       DisambigStats& stats)
++  {
++    stats.nHits[0] = 0; stats.nHits[1] = 0; stats.nHits[2] = 0;
++    stats.nMissedBySpacePoints[0] = 0;
++    stats.nMissedBySpacePoints[1] = 0;
++
++    for (size_t i = 0; i < eventHits.size(); ++i)
++    {
++        recob::Hit const& hit = eventHits[i];
++        std::vector<geo::WireID> cwids = wireReadout.ChannelToWire(hit.Channel());
++        // PHLEX-TRANSITIONAL: logging
++        if (cwids.empty()) { mf::LogWarning("DisambigFromSpacePoints") << "No wires for this channel???"; continue; }
++        if (hit.SignalType() == geo::kCollection)
++        {
++            assignments[i] = cwids.front();
++            stats.nHits[2]++; // count collection hit
++        }
++        else
++        {
++            geo::WireID id = hit.WireID();
++            size_t cryo = id.Cryostat, plane = id.Plane;
++            stats.nHits[plane]++; // count induction hit
++
++            auto const& spKeys = spKeysPerHit[i];
++            auto const& spacePoints = spacePointsPerHit[i];
++            if (spKeys.size() == 0)
++            {
++                unassigned.push_back(i);
++                stats.nMissedBySpacePoints[plane]++; //count unresolved hit
++            }
++            else
++            {
++                std::unordered_map< size_t, geo::WireID > tpcBestWire;
++                std::unordered_map< size_t, size_t > tpcScore;
++
++                for (size_t s = 0; s < spKeys.size(); ++s)
++                {
++                    auto search = spToTPC.find(spKeys[s]);
++                    if (search == spToTPC.end()) { continue; }
++                    size_t spTpc = search->second;
++
++                    const float max_dw = 1.; // max dist to wire [wire pitch]
++                    for (size_t w = 0; w < cwids.size(); ++w)
++                    {
++                        if (cwids[w].TPC != spTpc) { continue; } // not that side of APA
++
++                        float sp_wire = wireReadout.Plane(cwids[w]).WireCoordinate(spacePoints[s]->position());
++                        float dw = std::fabs(sp_wire - cwids[w].Wire);
++                        if (dw < max_dw)
++                        {
++                            tpcBestWire[spTpc] = cwids[w];
++                            tpcScore[spTpc]++;
++                        }
++                    }
++                }
++                if (!tpcScore.empty())
++                {
++                    geo::WireID bestId;
++                    size_t maxScore = 0;
++                    for (const auto & score : tpcScore)
++                    {
++                        if (score.second > maxScore)
++                        {
++                            maxScore = score.second;
++                            bestId = tpcBestWire[score.first];
++                        }
++                    }
++                    indHits[cryo][bestId.TPC][plane].push_back(i);
++                    assignments[i] = bestId;
++                }
++                else
++                {
++                  //mf::LogWarning("DisambigFromSpacePoints") << "Did not find matching wire (plane:" << plane << ").";
++                    unassigned.push_back(i);
++                    stats.nMissedBySpacePoints[plane]++; //count unresolved hit
++                }
++            }
++        }
++    }
++
++    return stats.nMissedBySpacePoints[0] + stats.nMissedBySpacePoints[1];
++  }
++
++  int ResolveUnassigned(DisambigFromSpacePointsCfg const& cfg,
++                        geo::WireReadoutGeom const& wireReadout,
++                        detinfo::DetectorPropertiesData const& detProp,
++                        std::unordered_map<size_t, geo::WireID>& assignments,
++                        std::vector<recob::Hit> const& eventHits,
++                        cryo_tpc_plane_keymap& allIndHits,
++                        std::vector<size_t>& unassigned,
++                        size_t nNeighbors,
++                        DisambigStats& stats)
++  {
++    stats.nMissedByNeighbors[0] = 0;
++    stats.nMissedByNeighbors[1] = 0;
++
++    std::unordered_map< size_t, geo::WireID > result;
++
++    for (const size_t key : unassigned)
++    {
++        recob::Hit const& hit = eventHits[key];
++        geo::WireID id = hit.WireID();
++        unsigned int cryo = id.Cryostat, plane = id.Plane;
++        float hitDrift = hit.PeakTime();
++
++        std::vector<geo::WireID> cwids = wireReadout.ChannelToWire(hit.Channel());
++        // PHLEX-TRANSITIONAL: logging
++        if (cwids.empty()) { mf::LogWarning("DisambigFromSpacePoints") << "No wires for this channel???"; continue; }
++
++        const float dwMax = cfg.maxDistance / wireReadout.Plane({0, 0, plane}).WirePitch(); // max distance in wires to look for neighbors
++        const float ddMax = dwMax * wireReadout.Plane({0, 0, plane}).WirePitch() / std::fabs(detProp.GetXTicksCoefficient(0, 0));
++
++        float bestScore = 0;
++        geo::WireID bestId;
++        for (size_t w = 0; w < cwids.size(); ++w)
++        {
++            const size_t tpc = cwids[w].TPC;
++            const size_t hitWire = cwids[w].Wire;
++
++            bool allowed = true;
++            for (auto t : cfg.excludeTPCs) { if (t == tpc) { allowed = false; break; } }
++            if (!allowed) { continue; }
++
++            geo::PlaneID const planeID(cryo, tpc, plane);
++            const float wirePitch = wireReadout.Plane(planeID).WirePitch();
++            const float driftPitch = std::fabs(detProp.GetXTicksCoefficient(tpc, cryo));
++
++            float maxDValue = cfg.maxDistance*cfg.maxDistance;
++            std::vector<float> distBuff(nNeighbors, maxDValue); // distance to n closest hits
++            const auto & keys = allIndHits[cryo][tpc][plane];
++            for (const size_t keyInd : keys)
++            {
++                recob::Hit const& hitInd = eventHits[keyInd];
++
++                auto search = assignments.find(keyInd);        // find resolved wire id
++                if (search == assignments.end())
++                {
++                    // PHLEX-TRANSITIONAL: logging
++                    mf::LogWarning("DisambigFromSpacePoints") << "Did not find resolved wire id.";
++                    continue;
++                }
++
++                //float dWire = std::abs(hitWire - search->second.Wire);
++                float dWire = std::abs(float(hitWire) - float(search->second.Wire));
++                float dDrift = std::fabs(hitDrift - hitInd.PeakTime());
++
++                if ((dWire > dwMax) || (dDrift > ddMax)) { continue; }
++
++                dWire *= wirePitch;
++                dDrift *= driftPitch;
++                float dist2 = dWire * dWire + dDrift * dDrift;
++
++                float maxd2 = 0;
++                size_t maxIdx = 0;
++                for (size_t i = 0; i < distBuff.size(); ++i )
++                {
++                    if (distBuff[i] > maxd2) { maxd2 = distBuff[i]; maxIdx = i; }
++                }
++                if (dist2 < maxd2) { distBuff[maxIdx] = dist2; }
++            }
++            float score = 0;
++            size_t nhits = 0;
++            for (size_t i = 0; i < distBuff.size(); ++i )
++            {
++                if (distBuff[i] < maxDValue) { score += 1./(1. + distBuff[i]); ++nhits; }
++            }
++            if (nhits > 0)
++            {
++                if (score > bestScore)
++                {
++                    bestScore = score;
++                    bestId = cwids[w];
++                }
++            }
++        }
++        if (bestId.isValid) { result[key] = bestId; }
++        else { stats.nMissedByNeighbors[plane]++; }
++    }
++
++    // remove from list of unassigned hits
++    for (const auto & entry : result)
++    {
++        unassigned.erase(std::remove(unassigned.begin(), unassigned.end(), entry.first), unassigned.end());
++    }
++
++    //assignments.merge(result); // use this with C++ 17
++    assignments.insert(result.begin(), result.end());
++    return stats.nMissedByNeighbors[0] + stats.nMissedByNeighbors[1];
++  }
++
++  void AssignFirstAllowedWire(DisambigFromSpacePointsCfg const& cfg,
++                              geo::WireReadoutGeom const& wireReadout,
++                              std::unordered_map<size_t, geo::WireID>& assignments,
++                              std::vector<recob::Hit> const& eventHits,
++                              std::vector<size_t> const& unassigned)
++  {
++    for (const size_t key : unassigned)
++    {
++        recob::Hit const& hit = eventHits[key];
++        std::vector<geo::WireID> cwids = wireReadout.ChannelToWire(hit.Channel());
++        // PHLEX-TRANSITIONAL: logging
++        if (cwids.empty()) { mf::LogWarning("DisambigFromSpacePoints") << "No wires for this channel???"; continue; }
++
++        geo::WireID bestId;
++        for (size_t w = 0; w < cwids.size(); ++w)
++        {
++            const size_t tpc = cwids[w].TPC;
++
++            bool allowed = true;
++            for (auto t : cfg.excludeTPCs) { if (t == tpc) { allowed = false; break; } }
++            if (allowed) { bestId = cwids[w]; break; }
++        }
++        if (bestId.isValid) { assignments[key] = bestId; }
++        // PHLEX-TRANSITIONAL: logging
++        else { mf::LogWarning("DisambigFromSpacePoints") << "None of wires is allowed for this hit???"; }
++    }
++  }
++
++  void AssignEveryAllowedWire(DisambigFromSpacePointsCfg const& cfg,
++                              geo::WireReadoutGeom const& wireReadout,
++                              std::unordered_map<size_t, std::vector<geo::WireID>>& assignments,
++                              std::vector<recob::Hit> const& eventHits,
++                              std::vector<size_t> const& unassigned)
++  {
++    for (const size_t key : unassigned)
++    {
++        recob::Hit const& hit = eventHits[key];
++        std::vector<geo::WireID> cwids = wireReadout.ChannelToWire(hit.Channel());
++        if (cwids.empty()) { continue; } // add warning here -- PHLEX pass 1: pre-existing gap, see MIGRATION_NOTES.md section 4
++
++        for (size_t w = 0; w < cwids.size(); ++w)
++        {
++            const size_t tpc = cwids[w].TPC;
++
++            bool allowed = true;
++            for (auto t : cfg.excludeTPCs) { if (t == tpc) { allowed = false; break; } }
++            if (allowed) { assignments[key].push_back(cwids[w]); }
++        }
++    }
++  }
++
++} // namespace dune
+diff --git a/dunereco/HitFinderDUNE/DisambigFromSpacePointsAlg.h b/dunereco/HitFinderDUNE/DisambigFromSpacePointsAlg.h
+new file mode 100644
+index 00000000..390c4dd7
+--- /dev/null
++++ b/dunereco/HitFinderDUNE/DisambigFromSpacePointsAlg.h
+@@ -0,0 +1,127 @@
++#ifndef DUNERECO_HITFINDERDUNE_DISAMBIGFROMSPACEPOINTSALG_H
++#define DUNERECO_HITFINDERDUNE_DISAMBIGFROMSPACEPOINTSALG_H
++
++////////////////////////////////////////////////////////////////////////
++//
++// DisambigFromSpacePoints algorithm (framework-free)
++//
++// Extracted from DisambigFromSpacePoints_module.cc (R.Sulej): assign a
++// wire to each hit using SpacePoints created by SpacePointSolver, then
++// resolve any hits left undisambiguated using neighboring hits.
++//
++// Phlex pass 1 extraction. See runs/dunereco-DisambigFromSpacePoints/
++// MIGRATION_NOTES.md in the art-to-phlex-agents kit for the separation
++// and extraction rationale.
++//
++////////////////////////////////////////////////////////////////////////
++
++#include <cstddef>
++#include <map>
++#include <string>
++#include <unordered_map>
++#include <vector>
++
++#include "larcorealg/Geometry/WireReadoutGeom.h"
++#include "larcoreobj/SimpleTypesAndConstants/geo_types.h"
++#include "lardataalg/DetectorInfo/DetectorPropertiesData.h"
++#include "lardataobj/RecoBase/Hit.h"
++#include "lardataobj/RecoBase/SpacePoint.h"
++
++// Deep diagnostic messages inside the algorithm use mf::LogWarning; the
++// messagefacility include and its PHLEX-TRANSITIONAL marker live in
++// DisambigFromSpacePointsAlg.cxx (the only translation unit that uses
++// mf::), not here, so an includer of this header does not also pull in
++// messagefacility. See MIGRATION_NOTES.md section 6.
++
++namespace dune {
++
++  // these types to be replaced with use of feature proposed in redmine #12602
++  // (moved verbatim from DisambigFromSpacePoints_module.cc)
++  typedef std::map<unsigned int, std::vector<size_t>> plane_keymap;
++  typedef std::map<unsigned int, plane_keymap> tpc_plane_keymap;
++  typedef std::map<unsigned int, tpc_plane_keymap> cryo_tpc_plane_keymap;
++
++  /// Configuration consumed by the algorithm functions below. Holds only
++  /// the FHiCL-sourced values the computation itself reads; input labels,
++  /// UseNeighbors, and MoveLeftovers stay at the module boundary because
++  /// they select *which* of these functions to call, not what any one of
++  /// them computes. Defaults live only in the module's FHiCL lookup.
++  struct DisambigFromSpacePointsCfg {
++    float maxDistance;
++    std::vector<size_t> excludeTPCs;
++  };
++
++  /// Per-event diagnostics, filled into the module's monitoring TTree
++  /// when MonitoringPlots is set. Replaces the module's fNHits and
++  /// fNMissedBySpacePoints data members, which RunOnSpacePoints reset at
++  /// the start of every call anyway, and its fNMissedByNeighbors member,
++  /// which ResolveUnassigned resets at the start of every call -- but
++  /// ResolveUnassigned only runs when UseNeighbors is set. The module
++  /// copies nMissedByNeighbors into fNMissedByNeighbors only in that same
++  /// case, to preserve the original's (buggy, pre-existing, not fixed
++  /// here) behaviour of never writing that branch at all otherwise.
++  struct DisambigStats {
++    int nHits[3] = {0, 0, 0};
++    int nMissedBySpacePoints[2] = {0, 0};
++    int nMissedByNeighbors[2] = {0, 0};
++  };
++
++  /// Maps each SpacePoint index (its key in the SpacePoint collection) to
++  /// the TPC of that SpacePoint's collection-plane hit, so induction hits
++  /// can be matched to SpacePoints on the correct side of the APA.
++  /// hitsPerSpacePoint[i] holds the hits associated with SpacePoint i
++  /// (resolved from the module's hit<->SpacePoint association).
++  std::unordered_map<size_t, size_t> BuildSpacePointToTPCMap(
++    std::vector<std::vector<recob::Hit const*>> const& hitsPerSpacePoint);
++
++  /// Assigns a wire to every hit whose associated SpacePoints resolve to
++  /// a single best wire. Collection-plane hits are assigned directly from
++  /// geometry. spacePointsPerHit[i] / spKeysPerHit[i] are, respectively,
++  /// the SpacePoints and their SpacePoint-collection keys associated with
++  /// eventHits[i] (resolved from the module's hit<->SpacePoint
++  /// association; the key is needed to look up spToTPC).
++  /// Returns the number of induction hits left undisambiguated. Takes no
++  /// DisambigFromSpacePointsCfg: this step uses only geometry, unlike
++  /// ResolveUnassigned and the AssignXWire functions below.
++  int RunOnSpacePoints(geo::WireReadoutGeom const& wireReadout,
++                       std::vector<recob::Hit> const& eventHits,
++                       std::vector<std::vector<recob::SpacePoint const*>> const& spacePointsPerHit,
++                       std::vector<std::vector<size_t>> const& spKeysPerHit,
++                       std::unordered_map<size_t, size_t> const& spToTPC,
++                       std::unordered_map<size_t, geo::WireID>& assignments,
++                       cryo_tpc_plane_keymap& indHits,
++                       std::vector<size_t>& unassigned,
++                       DisambigStats& stats);
++
++  /// Resolves hits listed in `unassigned` using the wire already assigned
++  /// to nearby hits recorded in `allIndHits` (built by RunOnSpacePoints).
++  /// Returns the number of hits still unresolved after this step.
++  int ResolveUnassigned(DisambigFromSpacePointsCfg const& cfg,
++                        geo::WireReadoutGeom const& wireReadout,
++                        detinfo::DetectorPropertiesData const& detProp,
++                        std::unordered_map<size_t, geo::WireID>& assignments,
++                        std::vector<recob::Hit> const& eventHits,
++                        cryo_tpc_plane_keymap& allIndHits,
++                        std::vector<size_t>& unassigned,
++                        size_t nNeighbors,
++                        DisambigStats& stats);
++
++  /// Puts every hit listed in `unassigned` on the first allowed wire
++  /// (MoveLeftovers == "first").
++  void AssignFirstAllowedWire(DisambigFromSpacePointsCfg const& cfg,
++                              geo::WireReadoutGeom const& wireReadout,
++                              std::unordered_map<size_t, geo::WireID>& assignments,
++                              std::vector<recob::Hit> const& eventHits,
++                              std::vector<size_t> const& unassigned);
++
++  /// Duplicates every hit listed in `unassigned` onto every allowed wire
++  /// (MoveLeftovers == "repeat").
++  void AssignEveryAllowedWire(DisambigFromSpacePointsCfg const& cfg,
++                              geo::WireReadoutGeom const& wireReadout,
++                              std::unordered_map<size_t, std::vector<geo::WireID>>& assignments,
++                              std::vector<recob::Hit> const& eventHits,
++                              std::vector<size_t> const& unassigned);
++
++} // namespace dune
++
++#endif
+diff --git a/dunereco/HitFinderDUNE/DisambigFromSpacePoints_module.cc b/dunereco/HitFinderDUNE/DisambigFromSpacePoints_module.cc
+index b389ce37..699eee9f 100644
+--- a/dunereco/HitFinderDUNE/DisambigFromSpacePoints_module.cc
++++ b/dunereco/HitFinderDUNE/DisambigFromSpacePoints_module.cc
+@@ -39,14 +39,13 @@
+ #include "lardata/Utilities/AssociationUtil.h"
+ #include "lardata/DetectorInfoServices/DetectorPropertiesService.h"
+ 
++// Phlex pass-1 extraction: framework-free algorithm
++#include "dunereco/HitFinderDUNE/DisambigFromSpacePointsAlg.h"
++
+ // ROOT includes
+ #include "TTree.h"
+ 
+ namespace dune {
+-  // these types to be replaced with use of feature proposed in redmine #12602
+-  typedef std::map< unsigned int, std::vector< size_t > > plane_keymap;
+-  typedef std::map< unsigned int, plane_keymap > tpc_plane_keymap;
+-  typedef std::map< unsigned int, tpc_plane_keymap > cryo_tpc_plane_keymap;
+ 
+   class DisambigFromSpacePoints : public art::EDProducer {
+   public:
+@@ -70,37 +69,6 @@ namespace dune {
+     void produce(art::Event& evt);
+ 
+   private:
+-    int runOnSpacePoints(
+-            const std::vector< art::Ptr<recob::Hit> > & eventHits,
+-            const art::FindManyP< recob::SpacePoint > & spFromHit,
+-            const std::unordered_map< size_t, size_t > & spToTPC,
+-            std::unordered_map< size_t, geo::WireID > & assignments,
+-            cryo_tpc_plane_keymap & indHits,
+-            std::vector<size_t> & unassigned
+-            );
+-
+-    int resolveUnassigned(
+-            detinfo::DetectorPropertiesData const& detProp,
+-            std::unordered_map< size_t, geo::WireID > & assignments,
+-            const std::vector< art::Ptr<recob::Hit> > & eventHits,
+-            cryo_tpc_plane_keymap & indHits,
+-            std::vector<size_t> & unassigned,
+-            size_t nNeighbors
+-            );
+-
+-    void assignFirstAllowedWire(
+-            std::unordered_map< size_t, geo::WireID > & assignments,
+-            const std::vector< art::Ptr<recob::Hit> > & eventHits,
+-            const std::vector<size_t> & unassigned
+-            ) const;
+-
+-    void assignEveryAllowedWire(
+-            std::unordered_map< size_t, std::vector<geo::WireID> > & assignments,
+-            const std::vector< art::Ptr<recob::Hit> > & eventHits,
+-            const std::vector<size_t> & unassigned
+-            ) const;
+-
+-
+     geo::WireReadoutGeom const* fWireReadoutGeom;
+ 
+     int fRun, fEvent;
+@@ -112,11 +80,15 @@ namespace dune {
+     const bool fMonitoringPlots;
+     const bool fUseNeighbors;
+     const size_t fNumNeighbors;
+-    const float fMaxDistance;
+     const std::string fMoveLeftovers;
+-    const std::vector< size_t > fExcludeTPCs;
+     const art::InputTag fHitModuleLabel;
+     const art::InputTag fSpModuleLabel;
++
++    // Framework-free configuration for DisambigFromSpacePointsAlg; built
++    // once, directly from FHiCL (MaxDistance/ExcludeTPCs are not kept as
++    // separate members -- round 1 did, and nothing else read them, so
++    // round 2 dropped the duplication per verifier finding F7).
++    const dune::DisambigFromSpacePointsCfg fCfg;
+   };
+ 
+   DisambigFromSpacePoints::DisambigFromSpacePoints(DisambigFromSpacePoints::Parameters const& config) :
+@@ -125,11 +97,10 @@ namespace dune {
+     fMonitoringPlots(config().MonitoringPlots()),
+     fUseNeighbors(config().UseNeighbors()),
+     fNumNeighbors(config().NumNeighbors()),
+-    fMaxDistance(config().MaxDistance()),
+     fMoveLeftovers(config().MoveLeftovers()),
+-    fExcludeTPCs(config().ExcludeTPCs()),
+     fHitModuleLabel(config().HitModuleLabel()),
+-    fSpModuleLabel(config().SpModuleLabel())
++    fSpModuleLabel(config().SpModuleLabel()),
++    fCfg{config().MaxDistance(), config().ExcludeTPCs()}
+   {
+     if (fNumNeighbors < 1)
+     {
+@@ -182,32 +153,57 @@ namespace dune {
+     // here is the copy of associations to hits, based on original hit assns
+     auto assns = std::make_unique<art::Assns<recob::Hit, recob::SpacePoint>>();
+ 
+-    // all hits in the collection
+-    std::vector< art::Ptr<recob::Hit> > eventHits;
+-    art::fill_ptr_vector(eventHits, hitsHandle);
+-
++    // Associations, read at the boundary. Both spFromHit and hitsFromSp
++    // stay FindManyP, not FindMany (round 1 had switched hitsFromSp to
++    // FindMany; reverted, see MIGRATION_NOTES.md section 4/"Round 2
++    // changes", F3): FindManyP hands back the art::Ptr itself, so
++    // dereferencing it below via .get() reproduces the original failure
++    // mode -- art::Exception(errors::ProductNotFound) thrown from
++    // art::Ptr<T>::operator->() (canvas Ptr.h) when the pointed-to
++    // product is unavailable. FindMany resolves associations eagerly via
++    // an internal "item ? item.get() : nullptr" check (canvas
++    // detail/IPRHelper.h) that silently turns an unavailable product into
++    // a null recob::Hit const*, which BuildSpacePointToTPCMap would then
++    // dereference unconditionally (undefined behaviour instead of a clean
++    // exception). spFromHit's art::Ptr<recob::SpacePoint>::key() is also
++    // still needed below, for spToTPC lookups and output associations.
+     art::FindManyP< recob::SpacePoint > spFromHit(hitsHandle, evt, fSpModuleLabel);
+     art::FindManyP< recob::Hit > hitsFromSp(spHandle, evt, fSpModuleLabel);
+ 
+     auto const detProp = art::ServiceHandle<detinfo::DetectorPropertiesService const>()->DataFor(evt);
+-    // map induction spacepoints to TPC by collection hits
+-    std::unordered_map< size_t, size_t > spToTPC;
++
++    // Resolve the hit<->SpacePoint association into the plain containers
++    // DisambigFromSpacePointsAlg needs. Both spFromHit.at(i) and
++    // hitsFromSp.at(i) are std::vector<art::Ptr<...>>; the algorithm
++    // needs the associated object's key alongside the SpacePoint (for
++    // spToTPC lookups and output associations), but does not need a
++    // key for the Hit side, so only the resolved recob::Hit const*
++    // pointers are kept there. Extracted in parallel per
++    // references/larsoft-boundary-patterns.md ("Associations read by the
++    // module").
++    std::vector<std::vector<recob::Hit const*>> hitsPerSpacePoint(spHandle->size());
+     for (size_t i = 0; i < spHandle->size(); ++i)
+     {
+-        auto hits = hitsFromSp.at(i);
+-        size_t tpc = geo::WireID::InvalidID;
+-        for (const auto & h : hits) // find Collection hit, assume one is enough
+-        {
+-            if (h->SignalType() == geo::kCollection) { tpc = h->WireID().TPC; break; }
+-        }
+-        if (tpc == geo::WireID::InvalidID)
++        auto const& hs = hitsFromSp.at(i);
++        hitsPerSpacePoint[i].reserve(hs.size());
++        for (auto const & h : hs)
+         {
+-          //mf::LogWarning("DisambigFromSpacePoints") << "No collection hit for this spacepoint.";
+-            continue;
++            hitsPerSpacePoint[i].push_back(h.get());
+         }
+-        for (const auto & h : hits) // set mapping for Induction hits
++    }
++    auto const spToTPC = dune::BuildSpacePointToTPCMap(hitsPerSpacePoint);
++
++    std::vector<std::vector<recob::SpacePoint const*>> spacePointsPerHit(hitsHandle->size());
++    std::vector<std::vector<size_t>> spKeysPerHit(hitsHandle->size());
++    for (size_t i = 0; i < hitsHandle->size(); ++i)
++    {
++        auto const& sps = spFromHit.at(i);
++        spacePointsPerHit[i].reserve(sps.size());
++        spKeysPerHit[i].reserve(sps.size());
++        for (auto const & sp : sps)
+         {
+-            if (h->SignalType() == geo::kInduction) { spToTPC[i] = tpc; }
++            spacePointsPerHit[i].push_back(sp.get());
++            spKeysPerHit[i].push_back(sp.key());
+         }
+     }
+ 
+@@ -216,19 +212,22 @@ namespace dune {
+     std::unordered_map< size_t, geo::WireID > hitToWire;                 // final hit-wire assignments
+     std::unordered_map< size_t, std::vector<geo::WireID> > hitToNWires;  // final hit-many-wires assignments
+ 
+-    hitToWire.reserve(eventHits.size());
++    hitToWire.reserve(hitsHandle->size());
+ 
+-    int n = runOnSpacePoints(eventHits, spFromHit, spToTPC, hitToWire, indHits, unassignedHits);
++    dune::DisambigStats stats;
++    int n = dune::RunOnSpacePoints(*fWireReadoutGeom, *hitsHandle, spacePointsPerHit, spKeysPerHit,
++                                   spToTPC, hitToWire, indHits, unassignedHits, stats);
+     mf::LogInfo("DisambigFromSpacePoints") << n << " hits undisambiguated by space points.";
+ 
+     if (fUseNeighbors)
+     {
+-        n = resolveUnassigned(detProp, hitToWire, eventHits, indHits, unassignedHits, fNumNeighbors);
++        n = dune::ResolveUnassigned(fCfg, *fWireReadoutGeom, detProp, hitToWire, *hitsHandle, indHits,
++                                    unassignedHits, fNumNeighbors, stats);
+         mf::LogInfo("DisambigFromSpacePoints") << n << " hits undisambiguated by neighborhood.";
+     }
+ 
+-    if (fMoveLeftovers == "repeat")     { assignEveryAllowedWire(hitToNWires, eventHits, unassignedHits);      }
+-    else if (fMoveLeftovers == "first") { assignFirstAllowedWire(hitToWire, eventHits, unassignedHits);        }
++    if (fMoveLeftovers == "repeat")     { dune::AssignEveryAllowedWire(fCfg, *fWireReadoutGeom, hitToNWires, *hitsHandle, unassignedHits); }
++    else if (fMoveLeftovers == "first") { dune::AssignFirstAllowedWire(fCfg, *fWireReadoutGeom, hitToWire, *hitsHandle, unassignedHits);   }
+     else                { mf::LogInfo("DisambigFromSpacePoints") << "Remaining undisambiguated hits dropped."; }
+ 
+     auto const hitPtrMaker = art::PtrMaker<recob::Hit>(evt);
+@@ -238,12 +237,12 @@ namespace dune {
+         size_t key = hw.first;
+         geo::WireID wid = hw.second;
+ 
+-        recob::HitCreator new_hit(*(eventHits[key]), wid);
++        recob::HitCreator new_hit(hitsHandle->at(key), wid);
+ 
+         hcol.emplace_back(new_hit.move(), channelHitWires.at(key));//, channelHitRawDigits.at(key));
+ 
+         auto hitPtr = hitPtrMaker(hcol.size() - 1);
+-        auto sps = spFromHit.at(eventHits[key].key());
++        auto sps = spFromHit.at(key);
+         for (auto const & spPtr : sps)
+         {
+             assns->addSingle(hitPtr, spPtr);
+@@ -255,12 +254,12 @@ namespace dune {
+         size_t key = hws.first;
+         for (auto const & wid : hws.second)
+         {
+-            recob::HitCreator new_hit(*(eventHits[key]), wid);
++            recob::HitCreator new_hit(hitsHandle->at(key), wid);
+ 
+             hcol.emplace_back(new_hit.move(), channelHitWires.at(key));//, channelHitRawDigits.at(key));
+ 
+             auto hitPtr = hitPtrMaker(hcol.size() - 1);
+-            auto sps = spFromHit.at(eventHits[key].key());
++            auto sps = spFromHit.at(key);
+             for (auto const & spPtr : sps)
+             {
+                 assns->addSingle(hitPtr, spPtr);
+@@ -268,251 +267,33 @@ namespace dune {
+         }
+     }
+ 
+-    if (fMonitoringPlots && fTree) { fTree->Fill(); } // save statistics if MonitoringPlots was set to true
+-
+-    // put the hit collection and associations into the event
+-    hcol.put_into(evt);
+-    evt.put(std::move(assns));
+-  }
+-
+-  int DisambigFromSpacePoints::runOnSpacePoints(
+-    const std::vector< art::Ptr<recob::Hit> > & eventHits,
+-    const art::FindManyP< recob::SpacePoint > & spFromHit,
+-    const std::unordered_map< size_t, size_t > & spToTPC,
+-    std::unordered_map< size_t, geo::WireID > & assignments,
+-    cryo_tpc_plane_keymap & indHits,
+-    std::vector<size_t> & unassigned
+-    )
+-  {
+-    fNHits[0] = 0; fNHits[1] = 0; fNHits[2] = 0;
+-    fNMissedBySpacePoints[0] = 0;
+-    fNMissedBySpacePoints[1] = 0;
+-
+-    for (size_t i = 0; i < eventHits.size(); ++i)
+-    {
+-        const art::Ptr<recob::Hit> & hit = eventHits[i];
+-        std::vector<geo::WireID> cwids = fWireReadoutGeom->ChannelToWire(hit->Channel());
+-        if (cwids.empty()) { mf::LogWarning("DisambigFromSpacePoints") << "No wires for this channel???"; continue; }
+-        if (hit->SignalType() == geo::kCollection)
+-        {
+-            assignments[hit.key()] = cwids.front();
+-            fNHits[2]++; // count collection hit
+-        }
+-        else
+-        {
+-            geo::WireID id = hit->WireID();
+-            size_t cryo = id.Cryostat, plane = id.Plane;
+-            fNHits[plane]++; // count induction hit
+-
+-            if (spFromHit.at(hit.key()).size() == 0)
+-            {
+-                unassigned.push_back(hit.key());
+-                fNMissedBySpacePoints[plane]++; //count unresolved hit
+-            }
+-            else
+-            {
+-                std::unordered_map< size_t, geo::WireID > tpcBestWire;
+-                std::unordered_map< size_t, size_t > tpcScore;
+-
+-                for (const auto & sp : spFromHit.at(hit.key()))
+-                {
+-                    auto search = spToTPC.find(sp.key());
+-                    if (search == spToTPC.end()) { continue; }
+-                    size_t spTpc = search->second;
+-
+-                    const float max_dw = 1.; // max dist to wire [wire pitch]
+-                    for (size_t w = 0; w < cwids.size(); ++w)
+-                    {
+-                        if (cwids[w].TPC != spTpc) { continue; } // not that side of APA
+-
+-                        float sp_wire = fWireReadoutGeom->Plane(cwids[w]).WireCoordinate(sp->position());
+-                        float dw = std::fabs(sp_wire - cwids[w].Wire);
+-                        if (dw < max_dw)
+-                        {
+-                            tpcBestWire[spTpc] = cwids[w];
+-                            tpcScore[spTpc]++;
+-                        }
+-                    }
+-                }
+-                if (!tpcScore.empty())
+-                {
+-                    geo::WireID bestId;
+-                    size_t maxScore = 0;
+-                    for (const auto & score : tpcScore)
+-                    {
+-                        if (score.second > maxScore)
+-                        {
+-                            maxScore = score.second;
+-                            bestId = tpcBestWire[score.first];
+-                        }
+-                    }
+-                    indHits[cryo][bestId.TPC][plane].push_back(hit.key());
+-                    assignments[hit.key()] = bestId;
+-                }
+-                else
+-                {
+-                  //mf::LogWarning("DisambigFromSpacePoints") << "Did not find matching wire (plane:" << plane << ").";
+-                    unassigned.push_back(hit.key());
+-                    fNMissedBySpacePoints[plane]++; //count unresolved hit
+-                }
+-            }
+-        }
+-    }
+-
+-    return fNMissedBySpacePoints[0] + fNMissedBySpacePoints[1];
+-  }
+-
+-  int DisambigFromSpacePoints::resolveUnassigned(
+-    detinfo::DetectorPropertiesData const& detProp,
+-    std::unordered_map< size_t, geo::WireID > & assignments,
+-    const std::vector< art::Ptr<recob::Hit> > & eventHits,
+-    cryo_tpc_plane_keymap & allIndHits,
+-    std::vector<size_t> & unassigned,
+-    size_t nNeighbors
+-    )
+-  {
+-    fNMissedByNeighbors[0] = 0;
+-    fNMissedByNeighbors[1] = 0;
+-
+-    std::unordered_map< size_t, geo::WireID > result;
+-
+-    for (const size_t key : unassigned)
+-    {
+-        const auto & hit = eventHits[key];
+-        geo::WireID id = hit->WireID();
+-        unsigned int cryo = id.Cryostat, plane = id.Plane;
+-        float hitDrift = hit->PeakTime();
+-
+-        std::vector<geo::WireID> cwids = fWireReadoutGeom->ChannelToWire(hit->Channel());
+-        if (cwids.empty()) { mf::LogWarning("DisambigFromSpacePoints") << "No wires for this channel???"; continue; }
+-
+-        const float dwMax = fMaxDistance / fWireReadoutGeom->Plane({0, 0, plane}).WirePitch(); // max distance in wires to look for neighbors
+-        const float ddMax = dwMax * fWireReadoutGeom->Plane({0, 0, plane}).WirePitch() / std::fabs(detProp.GetXTicksCoefficient(0, 0));
+-
+-        float bestScore = 0;
+-        geo::WireID bestId;
+-        for (size_t w = 0; w < cwids.size(); ++w)
+-        {
+-            const size_t tpc = cwids[w].TPC;
+-            const size_t hitWire = cwids[w].Wire;
+-
+-            bool allowed = true;
+-            for (auto t : fExcludeTPCs) { if (t == tpc) { allowed = false; break; } }
+-            if (!allowed) { continue; }
+-
+-            geo::PlaneID const planeID(cryo, tpc, plane);
+-            const float wirePitch = fWireReadoutGeom->Plane(planeID).WirePitch();
+-            const float driftPitch = std::fabs(detProp.GetXTicksCoefficient(tpc, cryo));
+-
+-            float maxDValue = fMaxDistance*fMaxDistance;
+-            std::vector<float> distBuff(nNeighbors, maxDValue); // distance to n closest hits
+-            const auto & keys = allIndHits[cryo][tpc][plane];
+-            for (const size_t keyInd : keys)
+-            {
+-                const auto & hitInd = eventHits[keyInd];
+-
+-                auto search = assignments.find(keyInd);        // find resolved wire id
+-                if (search == assignments.end())
+-                {
+-                    mf::LogWarning("DisambigFromSpacePoints") << "Did not find resolved wire id.";
+-                    continue;
+-                }
+-
+-                //float dWire = std::abs(hitWire - search->second.Wire);
+-                float dWire = std::abs(float(hitWire) - float(search->second.Wire));
+-                float dDrift = std::fabs(hitDrift - hitInd->PeakTime());
+-
+-                if ((dWire > dwMax) || (dDrift > ddMax)) { continue; }
+-
+-                dWire *= wirePitch;
+-                dDrift *= driftPitch;
+-                float dist2 = dWire * dWire + dDrift * dDrift;
+-
+-                float maxd2 = 0;
+-                size_t maxIdx = 0;
+-                for (size_t i = 0; i < distBuff.size(); ++i )
+-                {
+-                    if (distBuff[i] > maxd2) { maxd2 = distBuff[i]; maxIdx = i; }
+-                }
+-                if (dist2 < maxd2) { distBuff[maxIdx] = dist2; }
+-            }
+-            float score = 0;
+-            size_t nhits = 0;
+-            for (size_t i = 0; i < distBuff.size(); ++i )
+-            {
+-                if (distBuff[i] < maxDValue) { score += 1./(1. + distBuff[i]); ++nhits; }
+-            }
+-            if (nhits > 0)
+-            {
+-                if (score > bestScore)
+-                {
+-                    bestScore = score;
+-                    bestId = cwids[w];
+-                }
+-            }
+-        }
+-        if (bestId.isValid) { result[key] = bestId; }
+-        else { fNMissedByNeighbors[plane]++; }
+-    }
+-
+-    // remove from list of unassigned hits
+-    for (const auto & entry : result)
+-    {
+-        unassigned.erase(std::remove(unassigned.begin(), unassigned.end(), entry.first), unassigned.end());
+-    }
+-
+-    //assignments.merge(result); // use this with C++ 17
+-    assignments.insert(result.begin(), result.end());
+-    return fNMissedByNeighbors[0] + fNMissedByNeighbors[1];
+-  }
+-
+-  void DisambigFromSpacePoints::assignFirstAllowedWire(
+-    std::unordered_map< size_t, geo::WireID > & assignments,
+-    const std::vector< art::Ptr<recob::Hit> > & eventHits,
+-    const std::vector<size_t> & unassigned
+-    ) const
+-  {
+-    for (const size_t key : unassigned)
++    if (fMonitoringPlots && fTree)
+     {
+-        const auto & hit = eventHits[key];
+-        std::vector<geo::WireID> cwids = fWireReadoutGeom->ChannelToWire(hit->Channel());
+-        if (cwids.empty()) { mf::LogWarning("DisambigFromSpacePoints") << "No wires for this channel???"; continue; }
+-
+-        geo::WireID bestId;
+-        for (size_t w = 0; w < cwids.size(); ++w)
++        // Copy the algorithm's returned diagnostics into the TTree branch
++        // variables (the branches were bound to these members in the
++        // constructor). fNHits/fNMissedBySpacePoints are always
++        // recomputed by RunOnSpacePoints, so always copied, matching the
++        // original. fNMissedByNeighbors is copied only when
++        // ResolveUnassigned actually ran (fUseNeighbors), matching the
++        // original exactly: when UseNeighbors is false, the original
++        // never wrote fNMissedByNeighbors at all, so this branch kept
++        // reading whatever indeterminate value was left in memory from
++        // construction (see MIGRATION_NOTES.md section 4, suspected
++        // pre-existing issue -- not fixed here).
++        fNHits[0] = stats.nHits[0]; fNHits[1] = stats.nHits[1]; fNHits[2] = stats.nHits[2];
++        fNMissedBySpacePoints[0] = stats.nMissedBySpacePoints[0];
++        fNMissedBySpacePoints[1] = stats.nMissedBySpacePoints[1];
++        if (fUseNeighbors)
+         {
+-            const size_t tpc = cwids[w].TPC;
+-
+-            bool allowed = true;
+-            for (auto t : fExcludeTPCs) { if (t == tpc) { allowed = false; break; } }
+-            if (allowed) { bestId = cwids[w]; break; }
++            fNMissedByNeighbors[0] = stats.nMissedByNeighbors[0];
++            fNMissedByNeighbors[1] = stats.nMissedByNeighbors[1];
+         }
+-        if (bestId.isValid) { assignments[key] = bestId; }
+-        else { mf::LogWarning("DisambigFromSpacePoints") << "None of wires is allowed for this hit???"; }
++        fTree->Fill(); // save statistics if MonitoringPlots was set to true
+     }
+-  }
+-
+-  void DisambigFromSpacePoints::assignEveryAllowedWire(
+-    std::unordered_map< size_t, std::vector<geo::WireID> > & assignments,
+-    const std::vector< art::Ptr<recob::Hit> > & eventHits,
+-    const std::vector<size_t> & unassigned
+-    ) const
+-  {
+-    for (const size_t key : unassigned)
+-    {
+-        const auto & hit = eventHits[key];
+-        std::vector<geo::WireID> cwids = fWireReadoutGeom->ChannelToWire(hit->Channel());
+-        if (cwids.empty()) { continue; } // add warning here
+ 
+-        for (size_t w = 0; w < cwids.size(); ++w)
+-        {
+-            const size_t tpc = cwids[w].TPC;
+-
+-            bool allowed = true;
+-            for (auto t : fExcludeTPCs) { if (t == tpc) { allowed = false; break; } }
+-            if (allowed) { assignments[key].push_back(cwids[w]); }
+-        }
+-    }
++    // put the hit collection and associations into the event
++    hcol.put_into(evt);
++    evt.put(std::move(assns));
+   }
+ 
+   DEFINE_ART_MODULE(DisambigFromSpacePoints)
