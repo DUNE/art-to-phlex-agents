@@ -124,8 +124,7 @@ work to four subagents:
    from the new code. The reviewer then reviews the tests.
 
 Blocker and major findings go back to the extractor. After two failed rounds the manager
-stops and asks you. The verifier and reviewer should run on a different model from the
-extractor if you can arrange it.
+stops and asks you. See [Models and cost](#models-and-cost) for which model each role uses.
 
 The manager also writes the `art_compare.py` commands for the before-and-after comparison.
 
@@ -141,6 +140,41 @@ Generated-by: Claude Code (Opus 5.5)          last line of each commit message
 
 Use `Assisted-by` / `🤖 Assisted By` instead when you wrote or substantially reworked the
 change. Do not use `Co-Authored-By` for an AI tool.
+
+## Models and cost
+
+Each subagent's model is the `model:` line in its file in `agents/`. The manager is your own
+session, so it uses whatever model you started with.
+
+| Role | Default | What we have seen |
+|---|---|---|
+| Manager | your session | Opus in every run so far |
+| Extractor | `opus` | Sonnet needed two verifier rounds on the v0 example; Opus passed in one on v1 and on `NumberOfHitsFilter` |
+| Verifier | `opus` | caught 8 of 8 planted bugs; made one arithmetic slip, which the tester caught |
+| Reviewer | `opus` | found a real bug in the tests; no defects in either extraction |
+| Tester | `sonnet` | 25 traced test values, and caught the verifier's slip |
+
+Only Opus has been tried for the extractor and the verifier. The verifier is meant to be
+independent of the extractor, and two copies of the same model can share blind spots. For a
+stronger check, run the verifier step in a different tool (the skill works in Codex and
+Antigravity as well).
+
+To change models:
+
+- for one run, tell the manager, for example "run the reviewer on Sonnet";
+- for every run, edit the `model:` line in `agents/<role>.md`;
+- for all subagents at once, set `CLAUDE_CODE_SUBAGENT_MODEL`.
+
+The commit trailer names the model that wrote that commit. With the defaults, the extraction
+commit is Opus and the tests commit is Sonnet.
+
+**Cost of one run.** The fresh-clone run on `dunereco/HitFinderDUNE/NumberOfHitsFilter_module.cc`
+(2026-10-06; extractor, verifier, two reviews, tester with one fix, Opus manager) took
+17 minutes of model time and 27 minutes in total, and used about 5 USD at API prices: 4.46 USD
+of Opus and 0.54 USD of Sonnet. On a subscription it used about a third of one five-hour
+usage window. A larger module, or one that needs a second round, costs more. Opus did most
+of the spending, so a Sonnet manager or a Sonnet reviewer for the tests is the first saving
+to try. Neither has been tested yet.
 
 ## Safety
 
