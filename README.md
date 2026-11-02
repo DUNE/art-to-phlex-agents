@@ -8,10 +8,10 @@ skills.
 
 > [!WARNING]
 > **Experimental.** This kit is a tool of the DUNE Phlex Adoption Working Group. It is not a
-> product of the Phlex team and not yet an agreed DUNE workflow. Two extractions made with it
+> product of the Phlex team and not yet an agreed DUNE workflow. Three extractions made with it
 > have been built and compared with art output, outside any release: dunereco
-> `DisambigFromSpacePoints` and larreco `SpacePointSolver`, both identical in every tested
-> configuration. The agents' reviews are reviews, not validation:
+> `DisambigFromSpacePoints`, larreco `SpacePointSolver` and larevt `ADCFilter`, identical
+> in the tested products or filter decisions. The agents' reviews are reviews, not validation:
 > you are responsible for any change you take from a run, and only your own build, unit
 > tests and before-and-after comparison count as evidence that it is right.
 
@@ -245,7 +245,7 @@ in `agents/`. The manager is your own session, so it uses whatever model you sta
 
 | Role | Default | What we have seen |
 |---|---|---|
-| Manager | your session | Opus in every run so far |
+| Manager | your session | Opus in the completed Claude runs; Codex continued the interrupted ADCFilter run |
 | Extractor | `opus`, effort `high` | Sonnet needed two verifier rounds on the v0 example; Opus passed in one on three modules. The hardest step, so it keeps high effort |
 | Verifier | `opus`, effort `medium` | 8 of 8 planted bugs (Oct); at medium effort, 4 of the 4 subtlest again at blocker or major (Nov). Sonnet and Haiku noticed all 4 but each rated one as minor, which turns a FAIL into a PASS WITH NOTES |
 | Reviewer, extraction | `opus`, effort `medium` | reviews C++ lifetimes, ownership and build integration; Sonnet not tried yet |
@@ -345,6 +345,34 @@ A local GPU does not accelerate hosted inference, C++ compilation or these CPU a
 jobs automatically. It could help a GPU-enabled physics module or a local language model;
 either needs its own performance and equivalence checks.
 
+### ADCFilter continuation (2026-11-02)
+
+The Claude run stopped at its usage limit after 4.26 minutes and $1.39 list-equivalent,
+before the units worker ran. Codex finished the extraction, with separate static verification,
+C++ review and units inventory. This is a continuation, not a fresh model comparison.
+
+- SL7 before/after builds succeed. The after-build took 82 seconds with eight jobs.
+- All ten Boost.Test characterization cases pass, including Huffman input and the retained
+  fractional pedestal-subtraction truncation.
+- Before, after and repeated-before give identical decisions for ten events at thirteen
+  thresholds. At `MinADC=4000`, nine pass and one fails; at `1000000`, all fail.
+- Accepted event IDs and the ordered processed input IDs are checked. Changing the threshold
+  changes acceptance, and both builds give the same missing-product exception and exit 1.
+- `UNITS.md` has eleven entries, no unknown current units and no phase-1 blockers.
+  D3 configuration for an ADC threshold remains an owner decision. No physical conversion
+  helper is confirmed; one helper family is conditional on choosing a calibrated quantity.
+
+The ordinary `standard_detsim_dune10kt_1x2x6.fcl` does not produce the raw digits needed here.
+Keeping every output is insufficient. The release's `detsim_dune10kt_1x2x6_notpcsigproc.fcl`
+produced `tpcrawdecoder:daq`: 30,720 raw digits per event, stored uncompressed. Two five-event
+jobs took 248 and 246 seconds concurrently. The three scans took 59.48, 56.56 and 53.86
+seconds, excluding earlier setup attempts. The matrix's RootOutput modules require
+`dataTier` and `streamName` metadata in this release.
+
+Reports and the full patch are local scratch artifacts in `runs/larevt-ADCFilter/`;
+builds, jobs and per-event decisions are in `~/dune-dev/adc-validate/`. The module worktree
+remains uncommitted. The default Haiku units worker has not completed a benchmark.
+
 ## Safety
 
 The agents read source code you did not write. A comment in that code can contain text aimed
@@ -371,12 +399,13 @@ machines, see [Where to run it](#where-to-run-it).
 - The agents can be wrong in ways that look convincing: a confident report, a wrong number,
   a claim about an API that does not hold. The examples show each of these and how a second
   agent or a human caught it. Read the reports critically.
-- Tested so far on two `dunereco` modules (`DisambigFromSpacePoints` twice,
-  `NumberOfHitsFilter` once) and one LArSoft module (`larreco` `SpacePointSolver`), all in
-  Claude Code, with Opus as extractor and verifier in the recent runs.
+- Earlier runs covered two `dunereco` modules (`DisambigFromSpacePoints` twice,
+  `NumberOfHitsFilter` once) and `larreco` `SpacePointSolver`, in Claude Code. Codex
+  completed the interrupted `larevt` `ADCFilter` extraction and validation on 2026-11-02;
+  this mixed continuation is not a fresh Codex cost or latency benchmark.
 - Static review misses run-time faults. In the `SpacePointSolver` run all three reviewing
   agents read the line that makes the base module throw with `Fit: false`; only running that
-  configuration found it. Other tools and models follow the same instructions but have not been tried.
+  configuration found it. The Codex role policy above still needs a controlled benchmark.
 - The guide is v0.1.alpha and parts of the Phlex API are still marked experimental. `NOTICE.md`
   records the guide commit the references come from.
 
