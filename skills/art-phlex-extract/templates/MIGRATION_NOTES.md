@@ -78,8 +78,11 @@ Dependencies that must move first (includes from DUNE art-era repositories):
 ## 8. Validation plan
 
 How to show equivalence under art: the FHiCL job, input sample, products to compare, and
-how to compare them (`scripts/art_compare.py wrap` and `diff`, which compare the persisted
-products and TFileService trees entry by entry). Compare collections and
+how to compare them. `scripts/art_compare.py wrap` writes the job wrappers.
+`scripts/art_physics.py flatten` turns each product and association into a flat TTree (give
+the `--branch`, `--field` and `--assns` lines), and `art_physics.py compare` checks them row
+by row and draws before-and-after histograms. Use value accessors in the fields, not methods
+that return raw pointers. Compare collections and
 associations in produced order unless the order is known not to matter; a sorted comparison
 hides an ordering change, which is a common extraction risk. The pass criterion is
 bit-identical products and TFileService trees on a stated sample (file, event range). Cover
@@ -88,6 +91,21 @@ no shipped configuration uses (for example a non-default option together with a 
 switch); list them as `wrap --set` overrides. Diff the job log too, filtered to the module's
 message category, because log text and order are part of the behaviour. A unit-test idea for the
 algorithm on a hand-built input.
+
+Also plan these controls. Each one caught something in a real run:
+
+- **Rerun control:** the base build's rerun of the module reproduces the products stored in
+  the input file. Without it, a "before" that differs from production goes unnoticed.
+- **Coverage:** for each combination, the product counts it should change from production.
+  A combination that gives the same output as production on the sample tests nothing new
+  (for example a bad-channel switch when the detector's bad-channel list is empty); add the
+  input or service setting that makes it reach its path.
+- **Crashes:** a combination that throws in the base build is a suspected pre-existing bug.
+  The after build must throw the same exception.
+- **Repeatability:** run the base build twice, if the module could depend on memory layout,
+  thread timing or unseeded randomness.
+- **Positive control:** one deliberately changed build (a constant in the algorithm) must
+  give DIFFERENT.
 
 ## 9. Checklists
 
