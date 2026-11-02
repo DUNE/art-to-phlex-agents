@@ -8,8 +8,10 @@ skills.
 
 > [!WARNING]
 > **Experimental.** This kit is a tool of the DUNE Phlex Adoption Working Group. It is not a
-> product of the Phlex team and not yet an agreed DUNE workflow. No extraction made with it
-> has been built or run in a release yet. The agents' reviews are reviews, not validation:
+> product of the Phlex team and not yet an agreed DUNE workflow. Two extractions made with it
+> have been built and compared with art output, outside any release: dunereco
+> `DisambigFromSpacePoints` and larreco `SpacePointSolver`, both identical in every tested
+> configuration. The agents' reviews are reviews, not validation:
 > you are responsible for any change you take from a run, and only your own build, unit
 > tests and before-and-after comparison count as evidence that it is right.
 
@@ -65,7 +67,7 @@ v0.4.1 disagree, `binding-crosswalk.md` follows the v0.4.1 code and says so.
 | `skills/art-phlex-test/` | characterization unit tests for the extracted algorithm | yes |
 | `skills/explain-ste/` | writes hand-off notes in ASD-STE100 style for readers whose first language is not English | yes |
 | `skills/dune-pr-disclosure/` | adds the AI disclosure: a `Generated-by` or `Assisted-by` trailer on each commit and one footer line in the pull request | yes |
-| `agents/` | Claude Code subagents: `phlex-extractor`, `phlex-verifier`, `phlex-reviewer`, `phlex-tester` | yes |
+| `agents/` | Claude Code subagents: `phlex-extractor`, `phlex-verifier`, `phlex-reviewer`, `phlex-tester`, `phlex-validator` | yes |
 | `maintainers/agents/` | subagents for looking after the kit itself: `docs-writer`, `release-notes`, `security-auditor` | no |
 | `.claude/settings.json` | denies commits, pushes, `gh`, network tools and reads of credential files; asks before fetches, builds and inline scripts | as `.claude/settings.local.json`, if you have none |
 | `install.sh` | links the skills and agents into another repository | |
@@ -82,9 +84,13 @@ The scripts need Python 3.8 or newer and nothing outside the standard library:
 - `check_purity.py FILES` fails when extracted algorithm files include art, FHiCL,
   MessageLogger, service or Phlex code.
 - `art_compare.py wrap JOB.fcl --prefix before|after` writes a FHiCL wrapper with fixed output
-  file names, and `art_compare.py diff BEFORE AFTER` compares the persisted products (or a
-  TFileService tree) entry by entry, in stored order. `diff` needs `uproot`, `awkward` and
-  `numpy`; install them in a virtual environment outside the experiment repository.
+  file names. `art_compare.py diff BEFORE AFTER` compares flat trees entry by entry; it needs
+  `uproot`, `awkward` and `numpy` in a virtual environment outside the experiment repository,
+  and it cannot read real art event files.
+- `art_physics.py flatten` writes art products and associations to flat TTrees (one row per
+  object or pair, in stored order), and `art_physics.py compare` checks two such files row
+  by row and draws before-and-after histograms with ratio panels, KS and chi2 tests. Run it
+  with PyROOT from the experiment environment, where `lar` runs.
 
 ## Where to run it
 
@@ -134,7 +140,7 @@ even with `--force`, and refuses to follow a symbolic link that leads out of the
 ## How a run works
 
 Your main session is the **manager**. It picks the module, makes a git worktree, and gives
-work to four subagents:
+work to four subagents, and to a fifth if you allow building:
 
 1. **Extractor** (`phlex-extractor`). Applies `art-phlex-extract` in the worktree and writes
    `runs/<repo>-<Module>/MIGRATION_NOTES.md`.
@@ -145,14 +151,20 @@ work to four subagents:
 4. **Tester** (`phlex-tester`). Applies `art-phlex-test` and writes Boost.Test unit tests for
    the extracted algorithm. Each expected value is traced from the original module, not taken
    from the new code. The reviewer then reviews the tests.
+5. **Validator** (`phlex-validator`, optional). Only when you allow building: builds the base
+   and the extracted version in a container, runs the unit tests and the comparison matrix,
+   and writes `VALIDATION.md`. It never edits source.
 
+The verifier and the reviewer only read the change, so the manager runs them in parallel.
 Blocker and major findings go back to the extractor. After two failed rounds the manager
 stops and asks you. See [Models and cost](#models-and-cost) for which model each role uses.
 
-The manager also writes the `art_compare.py` commands for the before-and-after comparison.
+The manager also writes the `art_compare.py` and `art_physics.py` commands for the
+before-and-after comparison.
 
-The agents never commit, push or build. You build both versions, run the unit tests and the
-comparison, and open the pull request. Only the comparison and the tests you ran count as
+The agents never commit or push, and only the validator builds, and only when you allow it.
+Without it you build both versions, run the unit tests and the comparison, and open the pull
+request. Only the comparison and the tests you ran count as
 validation; the agents' reviews are reviews. The manager suggests a commit message and the AI
 disclosure: a trailer on every AI-assisted commit and one matching footer in the pull request.
 
@@ -224,6 +236,14 @@ usage window. A larger module, or one that needs a second round, costs more. Opu
 of the spending. The test review now runs on Sonnet; that run used Opus for it, so expect a
 little less. A Sonnet reviewer for the extraction is the next saving to test.
 
+A larger module costs more. The headless run on `larreco/SpacePointSolver` (2026-11-01; 540
+lines plus helpers; extractor, verifier, review, tester, two test reviews, Opus manager) took
+42 minutes and 11.46 USD at API prices: 9.74 USD of Opus and 1.72 USD of Sonnet, about 19.7
+million tokens, 95% of them cache reads. Building and running the comparison matrix
+afterwards took about an hour more in an SL7 container, most of it generating 40 test
+events. As a rule of thumb from the two runs: about 3 USD per module plus 1.5 USD per 100
+lines of module source.
+
 ## Safety
 
 The agents read source code you did not write. A comment in that code can contain text aimed
@@ -251,8 +271,11 @@ machines, see [Where to run it](#where-to-run-it).
   a claim about an API that does not hold. The examples show each of these and how a second
   agent or a human caught it. Read the reports critically.
 - Tested so far on two `dunereco` modules (`DisambigFromSpacePoints` twice,
-  `NumberOfHitsFilter` once), all in Claude Code, with Opus as extractor and verifier in the
-  recent runs. Other tools and models follow the same instructions but have not been tried.
+  `NumberOfHitsFilter` once) and one LArSoft module (`larreco` `SpacePointSolver`), all in
+  Claude Code, with Opus as extractor and verifier in the recent runs.
+- Static review misses run-time faults. In the `SpacePointSolver` run all three reviewing
+  agents read the line that makes the base module throw with `Fit: false`; only running that
+  configuration found it. Other tools and models follow the same instructions but have not been tried.
 - The guide is v0.1.alpha and parts of the Phlex API are still marked experimental. `NOTICE.md`
   records the guide commit the references come from.
 
@@ -276,9 +299,12 @@ tests and `VERIFICATION-rev2.md`, a delta review of one later change: `art::Ptr`
 resolved with `ptr.operator->()` instead of `&*ptr`. The model changed between the runs as well
 as the kit, so not all of the improvement belongs to the kit.
 
-Neither example has been built or run yet. `extraction-with-tests.patch` in v1 applies cleanly
-to dunereco `v10_22_00d01`. `art_compare.py` has only been tested on synthetic TTrees, not real
-art files.
+v1 has been built and run (2026-10-17, Spack and MPD on EL9): `extraction-with-tests.patch`
+applies to dunereco `v10_22_00d01`, the unit test passes, and the art output is identical
+in all 8 configurations. A larreco `SpacePointSolver` run (2026-11-01, not in `examples/`)
+was built in SL7 with `mrb` and compared over 40 single-particle events in 16 configurations
+with `art_physics.py`: identical products and associations in all 14 that run, the same
+exception in the 2 that throw, and DIFFERENT for a one-constant positive control.
 
 `examples/verifier-mutation-test/` tests the verifier itself. Eight copies of the v1 extraction
 each had one planted slip, and blind verifiers caught all eight at the exact line, with no false

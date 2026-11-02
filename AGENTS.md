@@ -48,8 +48,9 @@ phase, once Phlex can run the experiment's workflows. The binding plan targets P
 | Verifier | `skills/art-phlex-verify/SKILL.md` | strong reasoning, ideally a different model from the extractor | its report only |
 | Reviewer | `agents/phlex-reviewer.md` | strong reasoning | `REVIEW.md` only |
 | Tester | `skills/art-phlex-test/SKILL.md` | a mid-tier model; expected values are traced, not invented | test files, their CMake lines, `TESTS.md` |
+| Validator (optional) | `agents/phlex-validator.md` | a mid-tier model; it runs commands and reads results | build areas, job outputs, `VALIDATION.md`; never source |
 
-Claude Code subagent definitions for the four workers are in `agents/`. `install.sh` links
+Claude Code subagent definitions for the five workers are in `agents/`. `install.sh` links
 them and the skills into another project. Agents for maintaining the kit itself (docs,
 release notes, security audit) are in `maintainers/agents/` and are not installed.
 
@@ -72,7 +73,8 @@ reach a session started inside an experiment repository after `install.sh`.
   service, or Phlex headers. Anything that must stay for now carries
   `// PHLEX-TRANSITIONAL: <reason>` and is listed in the notes.
 - **Nothing event-scoped outlives the event**: no `art::Handle` members, no cached products.
-- **The human sets the build policy.** Without explicit permission, agents do not compile.
+- **The human sets the build policy.** Without explicit permission, agents do not compile;
+  with it, only the validator builds, and only inside the container it was given.
   In Claude Code, the kit's `.claude/settings.json` backs this up: it denies `git commit`,
   `git push`, `gh`, network tools and reads of credential files, and asks before fetches,
   build tools (`make`, `cmake`, `ctest`, `mrb`, `spack`, compilers) and inline scripts. The
@@ -93,7 +95,7 @@ skills/art-phlex-test/        characterization unit tests for the extracted algo
 skills/explain-ste/           ASD-STE100 writing skill, for hand-offs
 skills/dune-pr-disclosure/    AI disclosure trailer for commits and footer for the pull request
 .github/                      pull request template for the kit
-agents/                       Claude Code subagents: extractor, verifier, reviewer, tester
+agents/                       Claude Code subagents: extractor, verifier, reviewer, tester, validator
 maintainers/agents/           subagents for maintaining the kit (not installed)
 .claude/settings.json         deny and ask rules for Claude Code sessions in the kit
 install.sh                    link skills and agents into another project
