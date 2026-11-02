@@ -64,10 +64,11 @@ v0.4.1 disagree, `binding-crosswalk.md` follows the v0.4.1 code and says so.
 | `skills/art-phlex-orchestrate/` | the manager's workflow, so it also works outside the kit | yes |
 | `skills/art-phlex-extract/` | phase-1 skill: references condensed from the guide, LArSoft and DUNE patterns, templates, scripts | yes |
 | `skills/art-phlex-verify/` | static review of an extraction, without compiling | yes |
+| `skills/art-phlex-units/` | boundary quantities, evidence for their units, and phase-2 actions | yes |
 | `skills/art-phlex-test/` | characterization unit tests for the extracted algorithm | yes |
 | `skills/explain-ste/` | writes hand-off notes in ASD-STE100 style for readers whose first language is not English | yes |
 | `skills/dune-pr-disclosure/` | adds the AI disclosure: a `Generated-by` or `Assisted-by` trailer on each commit and one footer line in the pull request | yes |
-| `agents/` | Claude Code subagents: `phlex-extractor`, `phlex-verifier`, `phlex-reviewer`, `phlex-tester`, `phlex-validator` | yes |
+| `agents/` | Claude Code subagents: `phlex-extractor`, `phlex-verifier`, `phlex-reviewer`, `phlex-tester`, `phlex-validator`, `phlex-units` | yes |
 | `maintainers/agents/` | subagents for looking after the kit itself: `docs-writer`, `release-notes`, `security-auditor` | no |
 | `.claude/settings.json` | denies commits, pushes, `gh`, network tools and reads of credential files; asks before fetches, builds and inline scripts | as `.claude/settings.local.json`, if you have none |
 | `install.sh` | links the skills and agents into another repository | |
@@ -122,6 +123,20 @@ were made.
 - A container without network access, usable on shared machines, is planned. This section
   will change when it exists.
 
+### Local container setup used for these comparisons
+
+The host is a WSL2 laptop (Intel i9-13900H, 20 logical CPUs visible to Linux). The agents
+run on the host and use hosted models. Apptainer supplies the experiment environment;
+`/cvmfs` is bound into it, and source, build areas and event files stay in the local home
+directory. No GPVM is needed for this workflow.
+
+The SL7 wrapper uses the CVMFS `fermilab/fnal-dev-sl7:latest` image with a clean environment.
+The EL9 wrapper uses a local `fnal-dev-el9-spack.sif`. Both are in
+`~/github/dune-mpd-local/scripts/` on the development machine. These are existing local
+helpers, not files installed by this kit. Current ADCFilter and EL9 SpacePointSolver build
+scripts default to `-j8`; the earlier dunereco timing runs used `-j20` and pinned `-j4`.
+Build jobs are not the event job's thread count.
+
 ## Quick start
 
 Clone the kit and set `KIT`. The agents stop if `KIT` is not set.
@@ -155,7 +170,7 @@ even with `--force`, and refuses to follow a symbolic link that leads out of the
 ## How a run works
 
 Your main session is the **manager**. It picks the module, makes a git worktree, and gives
-work to four subagents, and to a fifth if you allow building:
+work to five subagents, and to a sixth if you allow building:
 
 1. **Extractor** (`phlex-extractor`). Applies `art-phlex-extract` in the worktree and writes
    `runs/<repo>-<Module>/MIGRATION_NOTES.md`.
@@ -170,7 +185,15 @@ work to four subagents, and to a fifth if you allow building:
    and the extracted version in a container, runs the unit tests and the comparison matrix,
    and writes `VALIDATION.md`. It never edits source.
 
-The verifier and the reviewer only read the change, so the manager runs them in parallel.
+6. **Units checker** (`phlex-units`). Runs alongside the verifier and reviewer. Writes
+   `UNITS.md`: every boundary quantity, evidence for its current unit (or `unknown`), the
+   applicable proposal decisions D1 to D8, product wrappers and shared conversion helpers.
+   Phase 1 changes no units. An extraction that changes units, conversions or numeric types
+   goes back to the extractor; other findings feed the binding plan. Pre-existing lossy
+   conversions are recorded and preserved.
+
+The verifier, reviewer and units checker read the source and write separate reports, so the
+manager runs them in parallel. The units proposal is not yet adopted.
 Blocker and major findings go back to the extractor. After two failed rounds the manager
 stops and asks you. See [Models and cost](#models-and-cost) for which model each role uses.
 
@@ -225,10 +248,11 @@ in `agents/`. The manager is your own session, so it uses whatever model you sta
 | Manager | your session | Opus in every run so far |
 | Extractor | `opus`, effort `high` | Sonnet needed two verifier rounds on the v0 example; Opus passed in one on three modules. The hardest step, so it keeps high effort |
 | Verifier | `opus`, effort `medium` | 8 of 8 planted bugs (Oct); at medium effort, 4 of the 4 subtlest again at blocker or major (Nov). Sonnet and Haiku noticed all 4 but each rated one as minor, which turns a FAIL into a PASS WITH NOTES |
-| Reviewer, extraction | `opus`, effort `medium` | no defects in three extractions; Sonnet not tried yet |
+| Reviewer, extraction | `opus`, effort `medium` | reviews C++ lifetimes, ownership and build integration; Sonnet not tried yet |
 | Reviewer, tests | `sonnet` (the manager starts it on Sonnet) | sent the SpacePointSolver tests back once, then passed them |
 | Tester | `sonnet`, effort `high` | 25 and 22 traced test values; caught the verifier's arithmetic slip |
-| Validator | `sonnet`, effort `medium` | new; it runs commands and reads summaries. Haiku is the next thing to try |
+| Validator | `sonnet`, effort `medium` | runs container builds and comparisons; command failures need investigation |
+| Units checker | `haiku`, effort `medium` | new; evidence-cited inventory, not a policy decision. Haiku has not completed a run yet |
 
 The verifier test (2026-11-02) re-ran blind verifiers on the planted-bug copies: the control
 and the four subtlest slips (log text, `float` literals, a dropped `reserve`, an unconditional
@@ -268,11 +292,58 @@ little less. A Sonnet reviewer for the extraction is the next saving to test.
 
 A larger module costs more. The headless run on `larreco/SpacePointSolver` (2026-11-01; 540
 lines plus helpers; extractor, verifier, review, tester, two test reviews, Opus manager) took
-42 minutes and 11.46 USD at API prices: 9.74 USD of Opus and 1.72 USD of Sonnet, about 19.7
+about 45 minutes and 11.46 USD at API prices: 9.74 USD of Opus and 1.72 USD of Sonnet, about 19.7
 million tokens, 95% of them cache reads. Building and running the comparison matrix
 afterwards took about an hour more in an SL7 container, most of it generating 40 test
-events. As a rule of thumb from the two runs: about 3 USD per module plus 1.5 USD per 100
-lines of module source.
+events. A two-point planning heuristic is about 3 USD per module plus 1.5 USD per 100
+lines of module source. It is not a validated cost model: fixtures, retries, cache reuse and
+review effort can dominate source length. These are list-price equivalents reported by
+Claude Code, not additional subscription invoices.
+
+### Codex candidates to benchmark
+
+The Claude agent YAML files do not configure Codex. Use the same role instructions and
+edit scopes in separate Codex agent contexts. The following are proposed settings, checked
+against the [official model guide](https://learn.chatgpt.com/docs/models) on 2026-11-02;
+they have not been benchmarked on this kit.
+
+| Role | Candidate | Effort |
+|---|---|---|
+| Manager, extraction reviewer, test reviewer, validator | GPT-6.1 Sol | medium |
+| Extractor, tester | GPT-6.1 Sol | high |
+| Verifier | GPT-6 Astra | medium |
+| Units checker | GPT-6 Luna | high |
+
+Start with the existing planted-defect suite and clean controls. Check severity as well as
+detection before replacing the current verifier. A different model can reduce shared
+assumptions, but does not prove independence. Escalate ambiguous units or calibration
+questions; the smaller model must not invent policy or units.
+
+### What the recorded cost means
+
+The SPS stream records 19,707,496 tokens, including 18,651,692 cache-read tokens (94.64%).
+Its three result records repeat the same cumulative $11.4620272; count that total once.
+The first result took 41.94 minutes and still had work running. Reported turn durations
+sum to 45.78 minutes; absolute start/end timestamps are absent, so use about 45 minutes
+of agent work rather than an exact end-to-end wall time.
+
+At standard short-context Sol API rates on 2026-11-02, the same aggregate token categories
+would cost $6.46 with matching cache reuse, or $41.51 with uncached input. This is a
+price-only illustration, not a Codex forecast or a bound. The mixed-role policy above has
+not been priced from a real run; tokenization, context size, effort and retries differ.
+See [API pricing](https://developers.openai.com/api/docs/pricing) and
+[Codex pricing and usage](https://learn.chatgpt.com/docs/pricing). Subscription allowance,
+credits and API-key billing are different; do not infer modules per window from API dollars.
+
+For a scale estimate, trial 10 to 15 modules covering size, dependencies and rare options.
+Record cost per accepted module, including failed attempts, cache use, fixes, container
+time and human review. Separate cold setup from warm work and avoid charging the same
+package build to every module. The older 594-module scenario ($5.7k, or $8.5k with an
+assumed retry allowance) is an extrapolation from two runs, not a delivery forecast.
+
+A local GPU does not accelerate hosted inference, C++ compilation or these CPU art/ROOT
+jobs automatically. It could help a GPU-enabled physics module or a local language model;
+either needs its own performance and equivalence checks.
 
 ## Safety
 
