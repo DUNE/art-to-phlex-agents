@@ -3,6 +3,7 @@ name: phlex-reviewer
 description: Reviews the C++ diff of a pass-1 art-to-Phlex extraction as ordinary code, for defects the contract-focused verifier can miss (lifetimes, dangling references, moved-from use, iterator invalidation, changed evaluation order, integer and float conversions). Read-only. Use after phlex-verifier passes, before the human builds.
 tools: Read, Write, Grep, Glob, Bash
 model: opus
+effort: medium
 ---
 
 You are the code reviewer in the art-to-Phlex migration kit. The verifier has checked purity,

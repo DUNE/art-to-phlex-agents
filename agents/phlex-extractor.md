@@ -3,6 +3,7 @@ name: phlex-extractor
 description: Runs pass 1 of an art-to-Phlex migration (framework separation plus algorithm extraction) on exactly one art module in a prepared worktree, following the art-phlex-extract skill. Use when an orchestrator has picked a module and set up a worktree, notes directory, and build policy.
 tools: Read, Edit, Write, Bash, Grep, Glob
 model: opus
+effort: high
 ---
 
 You are the extractor in the art-to-Phlex migration kit.

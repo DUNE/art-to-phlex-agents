@@ -202,27 +202,42 @@ section and the manager skill will say so.
 
 ## Models and cost
 
-Each subagent's model is the `model:` line in its file in `agents/`. The manager is your own
-session, so it uses whatever model you started with.
+Each subagent's model and reasoning effort are the `model:` and `effort:` lines in its file
+in `agents/`. The manager is your own session, so it uses whatever model you started with.
 
 | Role | Default | What we have seen |
 |---|---|---|
 | Manager | your session | Opus in every run so far |
-| Extractor | `opus` | Sonnet needed two verifier rounds on the v0 example; Opus passed in one on v1 and on `NumberOfHitsFilter` |
-| Verifier | `opus` | caught 8 of 8 planted bugs; made one arithmetic slip, which the tester caught |
-| Reviewer, extraction | `opus` | no defects in either extraction; Sonnet not tried yet |
-| Reviewer, tests | `sonnet` (the manager starts it on Sonnet) | Opus found a real bug in the tests on the dry run; Sonnet not tried yet |
-| Tester | `sonnet` | 25 traced test values, and caught the verifier's slip |
+| Extractor | `opus`, effort `high` | Sonnet needed two verifier rounds on the v0 example; Opus passed in one on three modules. The hardest step, so it keeps high effort |
+| Verifier | `opus`, effort `medium` | 8 of 8 planted bugs (Oct); at medium effort, 4 of the 4 subtlest again at blocker or major (Nov). Sonnet and Haiku noticed all 4 but each rated one as minor, which turns a FAIL into a PASS WITH NOTES |
+| Reviewer, extraction | `opus`, effort `medium` | no defects in three extractions; Sonnet not tried yet |
+| Reviewer, tests | `sonnet` (the manager starts it on Sonnet) | sent the SpacePointSolver tests back once, then passed them |
+| Tester | `sonnet`, effort `high` | 25 and 22 traced test values; caught the verifier's arithmetic slip |
+| Validator | `sonnet`, effort `medium` | new; it runs commands and reads summaries. Haiku is the next thing to try |
 
-Only Opus has been tried for the extractor and the verifier. The verifier is meant to be
-independent of the extractor, and two copies of the same model can share blind spots. For a
-stronger check, run the verifier step in a different tool (the skill works in Codex and
-Antigravity as well).
+The verifier test (2026-11-02) re-ran blind verifiers on the planted-bug copies: the control
+and the four subtlest slips (log text, `float` literals, a dropped `reserve`, an unconditional
+write). One run per model and effort, so read it as a direction, not a measurement:
+
+| Verifier | Slips noticed | Rated blocker or major | API cost per run |
+|---|---|---|---|
+| Opus, medium | 4 of 4 | 4 of 4 | 1.65 USD |
+| Sonnet, high | 4 of 4 | 3 of 4 | 0.82 USD |
+| Sonnet, medium | 4 of 4 | 3 of 4 | 0.63 USD |
+| Haiku, high | 4 of 4 | 3 of 4 | 0.31 USD |
+
+The verdict depends on the severity, so the verifier stays on Opus. A cheap model is useful
+as a second, different verifier: its findings can be added to Opus's, not used instead of
+them. Higher effort did not help Sonnet here, and medium effort did not hurt Opus.
+
+The verifier is meant to be independent of the extractor, and two copies of the same model
+can share blind spots. For a stronger check, run the verifier step in a different tool (the
+skill works in Codex and Antigravity as well).
 
 To change models:
 
 - for one run, tell the manager, for example "run the reviewer on Sonnet";
-- for every run, edit the `model:` line in `agents/<role>.md`;
+- for every run, edit the `model:` or `effort:` line in `agents/<role>.md`;
 - for all subagents at once, set `CLAUDE_CODE_SUBAGENT_MODEL`.
 
 The commit trailer names the model that wrote that commit. With the defaults, the extraction

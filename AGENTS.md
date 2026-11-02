@@ -48,7 +48,7 @@ phase, once Phlex can run the experiment's workflows. The binding plan targets P
 | Verifier | `skills/art-phlex-verify/SKILL.md` | strong reasoning, ideally a different model from the extractor | its report only |
 | Reviewer | `agents/phlex-reviewer.md` | strong reasoning | `REVIEW.md` only |
 | Tester | `skills/art-phlex-test/SKILL.md` | a mid-tier model; expected values are traced, not invented | test files, their CMake lines, `TESTS.md` |
-| Validator (optional) | `agents/phlex-validator.md` | a mid-tier model; it runs commands and reads results | build areas, job outputs, `VALIDATION.md`; never source |
+| Validator (optional) | `agents/phlex-validator.md` | a mid-tier model at medium effort; it runs commands and reads results | build areas, job outputs, `VALIDATION.md`; never source |
 
 Claude Code subagent definitions for the five workers are in `agents/`. `install.sh` links
 them and the skills into another project. Agents for maintaining the kit itself (docs,
