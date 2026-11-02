@@ -101,9 +101,24 @@ were made.
 - Do not run the agents on shared interactive machines (the DUNE GPVMs and similar). DUNE
   has asked people not to run Claude Code there, and those machines hold grid credentials
   and other users' files.
-- The agents never build. Copy the patch to a machine that can build the code (for DUNE, an
-  AL9 GPVM or a container with the release) and build, test and run the comparison there
-  yourself.
+- Only the optional validator builds, and only when you allow it. Otherwise copy the patch to
+  a machine that can build the code (for DUNE, an AL9 GPVM or a container with the release)
+  and build, test and run the comparison there yourself.
+- Two container routes have built and compared a LArSoft module (larreco `SpacePointSolver`,
+  dunesw `v10_22_00d01`) with identical results:
+  - **SL7** (`fnal-dev-sl7` from CVMFS): UPS `setup dunesw`, `mrb newDev`, `mrb g -t <tag>`,
+    `mrb b`. Nothing needed fixing.
+  - **EL9**: activate the release's Spack environment and build with plain CMake, replaying
+    the release's own configure line from `<pkg>/.spack/spack-build-out.txt.gz` and its
+    `spack-build-env.txt`. Three things matter: the release tarball's `CMakePresets.json`
+    (pass `<pkg>_FW_DIR_INIT=config_data` and the other preset values), the release's real
+    gcc instead of the Spack compiler wrapper, and `-Wno-error`, because the wrapper turns
+    every `-Werror` into `-Wno-error`. At run time put `.` on `FHICL_FILE_PATH`: DUNE's tool
+    manager re-reads the top-level FHiCL file through it, and UPS adds `.` but Spack does not.
+    MPD refused larreco here: the LArSoft packages in the DUNE release come from the LArSoft
+    Spack instance, so a DUNE-side solve cannot reuse them.
+  - Compare before and after on the same platform. SL7 (gcc 12.1) and EL9 (gcc 12.5) builds
+    of the same code differed in 2 of 96,391 charges at the 1e-10 level.
 - A container without network access, usable on shared machines, is planned. This section
   will change when it exists.
 
