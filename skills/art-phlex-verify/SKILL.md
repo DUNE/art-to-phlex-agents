@@ -184,7 +184,16 @@ Then judge the validation plan as a test: would it catch the kinds of change you
 step 4? It should run the configurations that exercise every branch the extraction touched,
 compare products and association pairs in their produced order when the extraction claims
 identical order (sorting hides ordering regressions), and cover the monitoring outputs if
-they are enabled in practice.
+they are enabled in practice. Check that it includes the rerun, coverage, crash and
+positive controls in the template's section 8, and that each combination reaches a path the
+production configuration does not.
+
+Read the base module once more for configuration-dependent registration: a product declared
+in `produces` only under a FHiCL flag, but used unconditionally (a `PtrMaker`, a
+`forPtrs` creator, a `getProductID`, or a `put`). Under the other value of the flag that
+throws at run time. This is a pre-existing bug, not an extraction finding; record it in the
+report and in the validation plan's crash list. In the SpacePointSolver run (2026-11-01) all
+three agents read such a line, and only running `Fit: false` found it.
 
 ### 8. Verdict and report
 

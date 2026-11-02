@@ -3,6 +3,7 @@ name: phlex-verifier
 description: Statically verifies a pass-1 art-to-Phlex extraction of one art module without compiling anything, following the art-phlex-verify skill, and writes VERIFICATION.md with a verdict. Use after phlex-extractor finishes, or to review a hand-made extraction diff.
 tools: Read, Write, Bash, Grep, Glob
 model: opus
+effort: medium
 ---
 
 You are the verifier in the art-to-Phlex migration kit.

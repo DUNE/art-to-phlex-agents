@@ -8,8 +8,10 @@ skills.
 
 > [!WARNING]
 > **Experimental.** This kit is a tool of the DUNE Phlex Adoption Working Group. It is not a
-> product of the Phlex team and not yet an agreed DUNE workflow. No extraction made with it
-> has been built or run in a release yet. The agents' reviews are reviews, not validation:
+> product of the Phlex team and not yet an agreed DUNE workflow. Three extractions made with it
+> have been built and compared with art output, outside any release: dunereco
+> `DisambigFromSpacePoints`, larreco `SpacePointSolver` and larevt `ADCFilter`, identical
+> in the tested products or filter decisions. The agents' reviews are reviews, not validation:
 > you are responsible for any change you take from a run, and only your own build, unit
 > tests and before-and-after comparison count as evidence that it is right.
 
@@ -62,10 +64,11 @@ v0.4.1 disagree, `binding-crosswalk.md` follows the v0.4.1 code and says so.
 | `skills/art-phlex-orchestrate/` | the manager's workflow, so it also works outside the kit | yes |
 | `skills/art-phlex-extract/` | phase-1 skill: references condensed from the guide, LArSoft and DUNE patterns, templates, scripts | yes |
 | `skills/art-phlex-verify/` | static review of an extraction, without compiling | yes |
+| `skills/art-phlex-units/` | boundary quantities, evidence for their units, and phase-2 actions | yes |
 | `skills/art-phlex-test/` | characterization unit tests for the extracted algorithm | yes |
 | `skills/explain-ste/` | writes hand-off notes in ASD-STE100 style for readers whose first language is not English | yes |
 | `skills/dune-pr-disclosure/` | adds the AI disclosure: a `Generated-by` or `Assisted-by` trailer on each commit and one footer line in the pull request | yes |
-| `agents/` | Claude Code subagents: `phlex-extractor`, `phlex-verifier`, `phlex-reviewer`, `phlex-tester` | yes |
+| `agents/` | Claude Code subagents: `phlex-extractor`, `phlex-verifier`, `phlex-reviewer`, `phlex-tester`, `phlex-validator`, `phlex-units` | yes |
 | `maintainers/agents/` | subagents for looking after the kit itself: `docs-writer`, `release-notes`, `security-auditor` | no |
 | `.claude/settings.json` | denies commits, pushes, `gh`, network tools and reads of credential files; asks before fetches, builds and inline scripts | as `.claude/settings.local.json`, if you have none |
 | `install.sh` | links the skills and agents into another repository | |
@@ -82,9 +85,13 @@ The scripts need Python 3.8 or newer and nothing outside the standard library:
 - `check_purity.py FILES` fails when extracted algorithm files include art, FHiCL,
   MessageLogger, service or Phlex code.
 - `art_compare.py wrap JOB.fcl --prefix before|after` writes a FHiCL wrapper with fixed output
-  file names, and `art_compare.py diff BEFORE AFTER` compares the persisted products (or a
-  TFileService tree) entry by entry, in stored order. `diff` needs `uproot`, `awkward` and
-  `numpy`; install them in a virtual environment outside the experiment repository.
+  file names. `art_compare.py diff BEFORE AFTER` compares flat trees entry by entry; it needs
+  `uproot`, `awkward` and `numpy` in a virtual environment outside the experiment repository,
+  and it cannot read real art event files.
+- `art_physics.py flatten` writes art products and associations to flat TTrees (one row per
+  object or pair, in stored order), and `art_physics.py compare` checks two such files row
+  by row and draws before-and-after histograms with ratio panels, KS and chi2 tests. Run it
+  with PyROOT from the experiment environment, where `lar` runs.
 
 ## Where to run it
 
@@ -95,11 +102,40 @@ were made.
 - Do not run the agents on shared interactive machines (the DUNE GPVMs and similar). DUNE
   has asked people not to run Claude Code there, and those machines hold grid credentials
   and other users' files.
-- The agents never build. Copy the patch to a machine that can build the code (for DUNE, an
-  AL9 GPVM or a container with the release) and build, test and run the comparison there
-  yourself.
+- Only the optional validator builds, and only when you allow it. Otherwise copy the patch to
+  a machine that can build the code (for DUNE, an AL9 GPVM or a container with the release)
+  and build, test and run the comparison there yourself.
+- Two container routes have built and compared a LArSoft module (larreco `SpacePointSolver`,
+  dunesw `v10_22_00d01`) with identical results:
+  - **SL7** (`fnal-dev-sl7` from CVMFS): UPS `setup dunesw`, `mrb newDev`, `mrb g -t <tag>`,
+    `mrb b`. Nothing needed fixing.
+  - **EL9**: activate the release's Spack environment and build with plain CMake, replaying
+    the release's own configure line from `<pkg>/.spack/spack-build-out.txt.gz` and its
+    `spack-build-env.txt`. Three things matter: the release tarball's `CMakePresets.json`
+    (pass `<pkg>_FW_DIR_INIT=config_data` and the other preset values), the release's real
+    gcc instead of the Spack compiler wrapper, and `-Wno-error`, because the wrapper turns
+    every `-Werror` into `-Wno-error`. At run time put `.` on `FHICL_FILE_PATH`: DUNE's tool
+    manager re-reads the top-level FHiCL file through it, and UPS adds `.` but Spack does not.
+    MPD refused larreco here: the LArSoft packages in the DUNE release come from the LArSoft
+    Spack instance, so a DUNE-side solve cannot reuse them.
+  - Compare before and after on the same platform. SL7 (gcc 12.1) and EL9 (gcc 12.5) builds
+    of the same code differed in 2 of 96,391 charges at the 1e-10 level.
 - A container without network access, usable on shared machines, is planned. This section
   will change when it exists.
+
+### Local container setup used for these comparisons
+
+The host is a WSL2 laptop (Intel i9-13900H, 20 logical CPUs visible to Linux). The agents
+run on the host and use hosted models. Apptainer supplies the experiment environment;
+`/cvmfs` is bound into it, and source, build areas and event files stay in the local home
+directory. No GPVM is needed for this workflow.
+
+The SL7 wrapper uses the CVMFS `fermilab/fnal-dev-sl7:latest` image with a clean environment.
+The EL9 wrapper uses a local `fnal-dev-el9-spack.sif`. Both are in
+`~/github/dune-mpd-local/scripts/` on the development machine. These are existing local
+helpers, not files installed by this kit. Current ADCFilter and EL9 SpacePointSolver build
+scripts default to `-j8`; the earlier dunereco timing runs used `-j20` and pinned `-j4`.
+Build jobs are not the event job's thread count.
 
 ## Quick start
 
@@ -134,7 +170,7 @@ even with `--force`, and refuses to follow a symbolic link that leads out of the
 ## How a run works
 
 Your main session is the **manager**. It picks the module, makes a git worktree, and gives
-work to four subagents:
+work to five subagents, and to a sixth if you allow building:
 
 1. **Extractor** (`phlex-extractor`). Applies `art-phlex-extract` in the worktree and writes
    `runs/<repo>-<Module>/MIGRATION_NOTES.md`.
@@ -145,14 +181,28 @@ work to four subagents:
 4. **Tester** (`phlex-tester`). Applies `art-phlex-test` and writes Boost.Test unit tests for
    the extracted algorithm. Each expected value is traced from the original module, not taken
    from the new code. The reviewer then reviews the tests.
+5. **Validator** (`phlex-validator`, optional). Only when you allow building: builds the base
+   and the extracted version in a container, runs the unit tests and the comparison matrix,
+   and writes `VALIDATION.md`. It never edits source.
 
+6. **Units checker** (`phlex-units`). Runs alongside the verifier and reviewer. Writes
+   `UNITS.md`: every boundary quantity, evidence for its current unit (or `unknown`), the
+   applicable proposal decisions D1 to D8, product wrappers and shared conversion helpers.
+   Phase 1 changes no units. An extraction that changes units, conversions or numeric types
+   goes back to the extractor; other findings feed the binding plan. Pre-existing lossy
+   conversions are recorded and preserved.
+
+The verifier, reviewer and units checker read the source and write separate reports, so the
+manager runs them in parallel. The units proposal is not yet adopted.
 Blocker and major findings go back to the extractor. After two failed rounds the manager
 stops and asks you. See [Models and cost](#models-and-cost) for which model each role uses.
 
-The manager also writes the `art_compare.py` commands for the before-and-after comparison.
+The manager also writes the `art_compare.py` and `art_physics.py` commands for the
+before-and-after comparison.
 
-The agents never commit, push or build. You build both versions, run the unit tests and the
-comparison, and open the pull request. Only the comparison and the tests you ran count as
+The agents never commit or push, and only the validator builds, and only when you allow it.
+Without it you build both versions, run the unit tests and the comparison, and open the pull
+request. Only the comparison and the tests you ran count as
 validation; the agents' reviews are reviews. The manager suggests a commit message and the AI
 disclosure: a trailer on every AI-assisted commit and one matching footer in the pull request.
 
@@ -173,9 +223,9 @@ The options are:
 
 - **the Phlex-era repository only** (for example `DUNE/dune-pd-hd`): copy the
   framework-free algorithm and its tests there, and leave the art-era repository unchanged.
-  This is the current leaning.
 - **the art-era repository** (for example `dunereco`): a pull request with the thinner module
-  and the algorithm, so the art module itself uses the extracted code.
+  and the algorithm, so the art module itself uses the extracted code. This is the current
+  leaning for phase 1, since the result still runs in art and is checked against art.
 - **neither yet**: keep the patch and the notes until phase 2.
 
 Until they decide, do not open pull requests from a run. The manager's
@@ -190,27 +240,43 @@ section and the manager skill will say so.
 
 ## Models and cost
 
-Each subagent's model is the `model:` line in its file in `agents/`. The manager is your own
-session, so it uses whatever model you started with.
+Each subagent's model and reasoning effort are the `model:` and `effort:` lines in its file
+in `agents/`. The manager is your own session, so it uses whatever model you started with.
 
 | Role | Default | What we have seen |
 |---|---|---|
-| Manager | your session | Opus in every run so far |
-| Extractor | `opus` | Sonnet needed two verifier rounds on the v0 example; Opus passed in one on v1 and on `NumberOfHitsFilter` |
-| Verifier | `opus` | caught 8 of 8 planted bugs; made one arithmetic slip, which the tester caught |
-| Reviewer, extraction | `opus` | no defects in either extraction; Sonnet not tried yet |
-| Reviewer, tests | `sonnet` (the manager starts it on Sonnet) | Opus found a real bug in the tests on the dry run; Sonnet not tried yet |
-| Tester | `sonnet` | 25 traced test values, and caught the verifier's slip |
+| Manager | your session | Opus in the completed Claude runs; Codex continued the interrupted ADCFilter run |
+| Extractor | `opus`, effort `high` | Sonnet needed two verifier rounds on the v0 example; Opus passed in one on three modules. The hardest step, so it keeps high effort |
+| Verifier | `opus`, effort `medium` | 8 of 8 planted bugs (Oct); at medium effort, 4 of the 4 subtlest again at blocker or major (Nov). Sonnet and Haiku noticed all 4 but each rated one as minor, which turns a FAIL into a PASS WITH NOTES |
+| Reviewer, extraction | `opus`, effort `medium` | reviews C++ lifetimes, ownership and build integration; Sonnet not tried yet |
+| Reviewer, tests | `sonnet` (the manager starts it on Sonnet) | sent the SpacePointSolver tests back once, then passed them |
+| Tester | `sonnet`, effort `high` | 25 and 22 traced test values; caught the verifier's arithmetic slip |
+| Validator | `sonnet`, effort `medium` | runs container builds and comparisons; command failures need investigation |
+| Units checker | `haiku`, effort `medium` | ADCFilter (fresh run): 14 rows, every unit cited, no phase-1 change, tick period honestly `unknown`; 0.02 USD |
 
-Only Opus has been tried for the extractor and the verifier. The verifier is meant to be
-independent of the extractor, and two copies of the same model can share blind spots. For a
-stronger check, run the verifier step in a different tool (the skill works in Codex and
-Antigravity as well).
+The verifier test (2026-11-02) re-ran blind verifiers on the planted-bug copies: the control
+and the four subtlest slips (log text, `float` literals, a dropped `reserve`, an unconditional
+write). One run per model and effort, so read it as a direction, not a measurement:
+
+| Verifier | Slips noticed | Rated blocker or major | API cost per run |
+|---|---|---|---|
+| Opus, medium | 4 of 4 | 4 of 4 | 1.65 USD |
+| Sonnet, high | 4 of 4 | 3 of 4 | 0.82 USD |
+| Sonnet, medium | 4 of 4 | 3 of 4 | 0.63 USD |
+| Haiku, high | 4 of 4 | 3 of 4 | 0.31 USD |
+
+The verdict depends on the severity, so the verifier stays on Opus. A cheap model is useful
+as a second, different verifier: its findings can be added to Opus's, not used instead of
+them. Higher effort did not help Sonnet here, and medium effort did not hurt Opus.
+
+The verifier is meant to be independent of the extractor, and two copies of the same model
+can share blind spots. For a stronger check, run the verifier step in a different tool (the
+skill works in Codex and Antigravity as well).
 
 To change models:
 
 - for one run, tell the manager, for example "run the reviewer on Sonnet";
-- for every run, edit the `model:` line in `agents/<role>.md`;
+- for every run, edit the `model:` or `effort:` line in `agents/<role>.md`;
 - for all subagents at once, set `CLAUDE_CODE_SUBAGENT_MODEL`.
 
 The commit trailer names the model that wrote that commit. With the defaults, the extraction
@@ -223,6 +289,103 @@ of Opus and 0.54 USD of Sonnet. On a subscription it used about a third of one f
 usage window. A larger module, or one that needs a second round, costs more. Opus did most
 of the spending. The test review now runs on Sonnet; that run used Opus for it, so expect a
 little less. A Sonnet reviewer for the extraction is the next saving to test.
+
+A larger module costs more. The headless run on `larreco/SpacePointSolver` (2026-11-01; 540
+lines plus helpers; extractor, verifier, review, tester, two test reviews, Opus manager) took
+about 45 minutes and 11.46 USD at API prices: 9.74 USD of Opus and 1.72 USD of Sonnet, about 19.7
+million tokens, 95% of them cache reads. Building and running the comparison matrix
+afterwards took about an hour more in an SL7 container, most of it generating 40 test
+events. A two-point planning heuristic is about 3 USD per module plus 1.5 USD per 100
+lines of module source. It is not a validated cost model: fixtures, retries, cache reuse and
+review effort can dominate source length. These are list-price equivalents reported by
+Claude Code, not additional subscription invoices.
+
+### Codex candidates to benchmark
+
+The Claude agent YAML files do not configure Codex. Use the same role instructions and
+edit scopes in separate Codex agent contexts. The following are proposed settings, checked
+against the [official model guide](https://learn.chatgpt.com/docs/models) on 2026-11-02;
+they have not been benchmarked on this kit.
+
+| Role | Candidate | Effort |
+|---|---|---|
+| Manager, extraction reviewer, test reviewer, validator | GPT-6.1 Sol | medium |
+| Extractor, tester | GPT-6.1 Sol | high |
+| Verifier | GPT-6 Astra | medium |
+| Units checker | GPT-6 Luna | high |
+
+Start with the existing planted-defect suite and clean controls. Check severity as well as
+detection before replacing the current verifier. A different model can reduce shared
+assumptions, but does not prove independence. Escalate ambiguous units or calibration
+questions; the smaller model must not invent policy or units.
+
+### What the recorded cost means
+
+The SPS stream records 19,707,496 tokens, including 18,651,692 cache-read tokens (94.64%).
+Its three result records repeat the same cumulative $11.4620272; count that total once.
+The first result took 41.94 minutes and still had work running. Reported turn durations
+sum to 45.78 minutes; absolute start/end timestamps are absent, so use about 45 minutes
+of agent work rather than an exact end-to-end wall time.
+
+At standard short-context Sol API rates on 2026-11-02, the same aggregate token categories
+would cost $6.46 with matching cache reuse, or $41.51 with uncached input. This is a
+price-only illustration, not a Codex forecast or a bound. The mixed-role policy above has
+not been priced from a real run; tokenization, context size, effort and retries differ.
+See [API pricing](https://developers.openai.com/api/docs/pricing) and
+[Codex pricing and usage](https://learn.chatgpt.com/docs/pricing). Subscription allowance,
+credits and API-key billing are different; do not infer modules per window from API dollars.
+
+For a scale estimate, trial 10 to 15 modules covering size, dependencies and rare options.
+Record cost per accepted module, including failed attempts, cache use, fixes, container
+time and human review. Separate cold setup from warm work and avoid charging the same
+package build to every module. The older 594-module scenario ($5.7k, or $8.5k with an
+assumed retry allowance) is an extrapolation from two runs, not a delivery forecast.
+
+A local GPU does not accelerate hosted inference, C++ compilation or these CPU art/ROOT
+jobs automatically. It could help a GPU-enabled physics module or a local language model;
+either needs its own performance and equivalence checks.
+
+### ADCFilter continuation (2026-11-02)
+
+The Claude run stopped at its usage limit after 4.26 minutes and $1.39 list-equivalent,
+before the units worker ran. Codex finished the extraction, with separate static verification,
+C++ review and units inventory. This is a continuation, not a fresh model comparison.
+
+- SL7 before/after builds succeed. The after-build took 82 seconds with eight jobs.
+- All ten Boost.Test characterization cases pass, including Huffman input and the retained
+  fractional pedestal-subtraction truncation.
+- Before, after and repeated-before give identical decisions for ten events at thirteen
+  thresholds. At `MinADC=4000`, nine pass and one fails; at `1000000`, all fail.
+- Accepted event IDs and the ordered processed input IDs are checked. Changing the threshold
+  changes acceptance, and both builds give the same missing-product exception and exit 1.
+- `UNITS.md` has eleven entries, no unknown current units and no phase-1 blockers.
+  D3 configuration for an ADC threshold remains an owner decision. No physical conversion
+  helper is confirmed; one helper family is conditional on choosing a calibrated quantity.
+
+The ordinary `standard_detsim_dune10kt_1x2x6.fcl` does not produce the raw digits needed here.
+Keeping every output is insufficient. The release's `detsim_dune10kt_1x2x6_notpcsigproc.fcl`
+produced `tpcrawdecoder:daq`: 30,720 raw digits per event, stored uncompressed. Two five-event
+jobs took 248 and 246 seconds concurrently. The three scans took 59.48, 56.56 and 53.86
+seconds, excluding earlier setup attempts. The matrix's RootOutput modules require
+`dataTier` and `streamName` metadata in this release.
+
+Reports and the full patch are local scratch artifacts in `runs/larevt-ADCFilter/`;
+builds, jobs and per-event decisions are in `~/dune-dev/adc-validate/`. The module worktree
+remains uncommitted.
+
+### ADCFilter, fresh uninterrupted run (2026-11-02)
+
+A second, fresh headless run on a new worktree at the same base, with all six workers and
+no hand edits: **6.5 minutes and 5.19 USD** at list prices (Opus 4.48, Sonnet 0.69,
+Haiku 0.02). Verifier PASS WITH NOTES (0 blocker, 0 major) and reviewer `ship` in one
+round; 18 characterization cases, test review `ship`. The Haiku units checker wrote a
+14-row `UNITS.md` with file and line evidence and no blocking finding, matching the
+independent Codex inventory above.
+
+Validated with the same harness: SL7 build 63 seconds, `ctest` passes, and the decisions
+for ten events at thirteen thresholds are identical to the original build. Reports are in
+`runs/larevt-ADCFilter-clean/` (local). Small modules cost more per line than the fit
+below predicts (about 4 USD), because reading the kit is a fixed cost.
 
 ## Safety
 
@@ -250,9 +413,13 @@ machines, see [Where to run it](#where-to-run-it).
 - The agents can be wrong in ways that look convincing: a confident report, a wrong number,
   a claim about an API that does not hold. The examples show each of these and how a second
   agent or a human caught it. Read the reports critically.
-- Tested so far on two `dunereco` modules (`DisambigFromSpacePoints` twice,
-  `NumberOfHitsFilter` once), all in Claude Code, with Opus as extractor and verifier in the
-  recent runs. Other tools and models follow the same instructions but have not been tried.
+- Earlier runs covered two `dunereco` modules (`DisambigFromSpacePoints` twice,
+  `NumberOfHitsFilter` once) and `larreco` `SpacePointSolver`, in Claude Code. Codex
+  completed the interrupted `larevt` `ADCFilter` extraction and validation on 2026-11-02;
+  this mixed continuation is not a fresh Codex cost or latency benchmark.
+- Static review misses run-time faults. In the `SpacePointSolver` run all three reviewing
+  agents read the line that makes the base module throw with `Fit: false`; only running that
+  configuration found it. The Codex role policy above still needs a controlled benchmark.
 - The guide is v0.1.alpha and parts of the Phlex API are still marked experimental. `NOTICE.md`
   records the guide commit the references come from.
 
@@ -276,9 +443,12 @@ tests and `VERIFICATION-rev2.md`, a delta review of one later change: `art::Ptr`
 resolved with `ptr.operator->()` instead of `&*ptr`. The model changed between the runs as well
 as the kit, so not all of the improvement belongs to the kit.
 
-Neither example has been built or run yet. `extraction-with-tests.patch` in v1 applies cleanly
-to dunereco `v10_22_00d01`. `art_compare.py` has only been tested on synthetic TTrees, not real
-art files.
+v1 has been built and run (2026-10-17, Spack and MPD on EL9): `extraction-with-tests.patch`
+applies to dunereco `v10_22_00d01`, the unit test passes, and the art output is identical
+in all 8 configurations. A larreco `SpacePointSolver` run (2026-11-01, not in `examples/`)
+was built in SL7 with `mrb` and compared over 40 single-particle events in 16 configurations
+with `art_physics.py`: identical products and associations in all 14 that run, the same
+exception in the 2 that throw, and DIFFERENT for a one-constant positive control.
 
 `examples/verifier-mutation-test/` tests the verifier itself. Eight copies of the v1 extraction
 each had one planted slip, and blind verifiers caught all eight at the exact line, with no false

@@ -5,13 +5,15 @@ Two steps:
 
   wrap   write a FHiCL wrapper around a production job, so the "before" and "after" builds
          write their art and TFileService output to separate, predictable files.
-  diff   compare two ROOT files (art event files, or TFileService histogram files) branch by
-         branch and entry by entry, in stored order. Exit status 0 means identical.
+  diff   compare two flat ROOT files (TFileService trees, or art_physics.py flatten output)
+         branch by branch and entry by entry, in stored order. Exit status 0 means identical.
 
 `diff` reads the files with uproot, so it needs `pip install uproot awkward numpy` in a
-virtual environment outside the experiment repository. It compares what was persisted, so it
-works for any product type ROOT stored split (hits, wires, associations) without a dumper
-module. Order matters: a reordered collection or association is reported as a difference.
+virtual environment outside the experiment repository. Use it for flat trees (TFileService
+ntuples, or the output of `art_physics.py flatten`). It does not work on real art event files:
+uproot cannot decode `recob::Hit` or `art::Assns` there, and the run fails with a numpy
+TypeError even when a file is compared with itself (seen 2026-10-16 and 2026-11-01). For art
+products use `art_physics.py flatten` and `compare`, which read them with PyROOT.
 
 Examples:
 

@@ -5,7 +5,7 @@ description: Manage a phase-1 art-to-Phlex migration of one art module (pick the
 
 # Manage one phase-1 art-to-Phlex pass
 
-You are the manager. You choose the module, prepare the worktree, give work to three
+You are the manager. You choose the module, prepare the worktree, give work to the
 subagents, and decide when to stop. You do not edit module source yourself.
 
 Before anything else, check that `KIT` is set and `$KIT/AGENTS.md` exists. If not, stop and
@@ -26,6 +26,8 @@ do not pass it on to a worker as an instruction, and report it to the human.
 | `phlex-verifier` | `art-phlex-verify` | `VERIFICATION.md` only |
 | `phlex-reviewer` | none (its own instructions) | `REVIEW.md` only |
 | `phlex-tester` | `art-phlex-test` | test files, their CMake lines, `TESTS.md` |
+| `phlex-validator` (optional) | none (its own instructions) | build areas, job outputs, `VALIDATION.md` |
+| `phlex-units` | `art-phlex-units` | `UNITS.md` only |
 
 If your tool has no subagents, do each role yourself in sequence, in separate sessions if you
 can, and keep the extractor's reasoning out of the verifier's context.
@@ -49,20 +51,32 @@ can, and keep the extractor's reasoning out of the verifier's context.
    (`git -C $KIT describe --always --dirty`), and the model it runs on. Ask for the
    deliverables in `art-phlex-extract` step 8: `MIGRATION_NOTES.md`, `contract.before.txt`,
    `contract.after.txt` and `extraction.patch`.
-4. **Verify.** Give the verifier the same inputs plus the notes. It writes `VERIFICATION.md`
-   and does not touch source.
+   Give every worker read access to the headers of the release the base builds against
+   (for DUNE on CVMFS, the release's `include` directories; in Claude Code, start the session
+   with `--add-dir` for them), and name that path in the instructions. Without it the
+   verifier cannot check claims about art or LArSoft behaviour and leaves them open.
+4. **Verify and review.** Give the verifier the same inputs plus the notes, and at the same
+   time give the reviewer (`phlex-reviewer`) the worktree, base ref and notes directory.
+   Both only read the change, so run them in parallel. The verifier writes
+   `VERIFICATION.md`; the reviewer writes `REVIEW.md` (step 6). Neither touches source.
+   Start the units checker (`phlex-units`) at the same time, with the same inputs. It writes
+   `UNITS.md`: the units of every quantity at the module boundary and what the DUNE
+   system-of-units proposal would need in phase 2. Only its "unit changed in the
+   extraction" finding goes back to the extractor, like a verifier major; the rest goes into
+   the binding plan and the hand-off. After an extractor fix, re-run it only if the fix
+   touched a quantity it listed.
 5. **Iterate.** Blocker and major findings go back to the extractor, resuming the same agent
    when the tool allows it. After its fixes the extractor refreshes every file:line reference
    in the notes, since edits shift lines. Re-verify, keeping the previous report as
    `VERIFICATION-round<N>.md`. Minor findings on a PASS WITH NOTES go to the human with the
    hand-off instead of another round. After two rounds without a pass, stop and involve the
    human.
-6. **Review.** After the verifier passes, give the reviewer (`phlex-reviewer`) the
-   worktree, base ref and notes directory. It reads the diff as ordinary C++ (lifetimes,
+6. **Review.** The reviewer from step 4 reads the diff as ordinary C++ (lifetimes,
    moves, container invalidation, build files), writes `REVIEW.md`, and edits nothing. A
-   `fix first` verdict goes back to the extractor like a verifier major, then re-verify.
-7. **Test.** After the reviewer says `ship`, give the tester (`phlex-tester`) the same
-   inputs. It writes characterization unit tests with expected values traced from the
+   `fix first` verdict goes back to the extractor like a verifier major; after the fix,
+   run the verifier and the reviewer again, in parallel.
+7. **Test.** After the verifier passes and the reviewer says `ship`, give the tester
+   (`phlex-tester`) the same inputs. It writes characterization unit tests with expected values traced from the
    original module, and `TESTS.md`. Then give the reviewer the new test files to review,
    starting it on the `sonnet` model for this review (in Claude Code, pass the model when
    you start the subagent). The extraction review in step 6 keeps the reviewer's default
@@ -74,10 +88,20 @@ can, and keep the extractor's reasoning out of the verifier's context.
    Then mark the test files intent-to-add (`git -C <worktree> add -N <test files>`) and
    write `extraction-with-tests.patch` next to `extraction.patch`:
    `git -C <worktree> diff <base> > <notes>/extraction-with-tests.patch`.
-8. **Equivalence commands.** Prepare the before-and-after art comparison for the human with
-   `$KIT/skills/art-phlex-extract/scripts/art_compare.py`: one `wrap` per job and option
-   set in the validation plan, for the base build (`--prefix before`) and the branch build
-   (`--prefix after`), and the `diff` commands for the art file and the TFileService file.
+8. **Equivalence commands.** Prepare the before-and-after art comparison for the human:
+   one `art_compare.py wrap` per job and option set in the validation plan, for the base
+   build (`--prefix before`) and the branch build (`--prefix after`); then
+   `art_physics.py flatten` for each art file, with the `--branch`, `--field` and `--assns`
+   lines from the plan, and `art_physics.py compare` for each pair. Both scripts are in
+   `$KIT/skills/art-phlex-extract/scripts/`. Do not give `art_compare.py diff` for art
+   event files: it cannot read real art products. Include the controls from the plan
+   (rerun, coverage, crashes, repeatability, positive control).
+   **Optional, only if the human allows building:** give the validator (`phlex-validator`)
+   the worktree, base ref, notes directory, the build area for each version and the
+   container command. It builds both versions, runs the unit tests and the comparison
+   matrix, and writes `VALIDATION.md`. A DIFFERENT, a new crash or a failing test goes back
+   to the extractor like a verifier major. The validator's results are evidence the human
+   can check; they do not replace the human's own review of them.
 9. **Reconcile the notes.** The human reads the files, not this chat. Anything found after
    the extractor wrote `MIGRATION_NOTES.md` goes into a final `## Addenda` section there,
    each item with its source report: new suspected pre-existing bugs (for example from the
@@ -99,10 +123,10 @@ until they decide." Under that line give:
 
 - the Phlex-era home from the binding plan (`Phlex-era home` in `MIGRATION_NOTES.md`), or
   the candidates if it is ambiguous, and the `dunecore` dependencies that must move first;
-- **option A, Phlex-era repository only** (the current leaning): the commands that would copy
+- **option A, Phlex-era repository only**: the commands that would copy
   the framework-free algorithm files and their tests into that repository on a new branch
   (`phlex-extract/<Module>`), keeping the relative layout, with commit messages and trailers;
-- **option B, art-era repository**: the commit split (extraction, then tests) with trailers,
+- **option B, art-era repository** (the current leaning for phase 1): the commit split (extraction, then tests) with trailers,
   the branch to push, and the pull request against the base branch, with the footer;
 - **option C, neither yet**: keep `extraction-with-tests.patch` and the notes.
 
@@ -116,6 +140,7 @@ create branches in other repositories, copy files there, or open issues or pull 
 - the unit tests written, how many cases need a fixture, and the build and `ctest` commands;
 - the `art_compare.py wrap` and `diff` commands from step 8;
 - open findings by severity;
+- the units inventory from `UNITS.md`: quantities, unknown units, firewall helpers needed;
 - `PHLEX-TRANSITIONAL` items and suspected pre-existing bugs;
 - the **Where the change goes** section above;
 - the commands for the build and for the before-and-after art comparison, which the human runs.
