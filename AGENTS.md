@@ -49,8 +49,9 @@ phase, once Phlex can run the experiment's workflows. The binding plan targets P
 | Reviewer | `agents/phlex-reviewer.md` | strong reasoning | `REVIEW.md` only |
 | Tester | `skills/art-phlex-test/SKILL.md` | a mid-tier model; expected values are traced, not invented | test files, their CMake lines, `TESTS.md` |
 | Validator (optional) | `agents/phlex-validator.md` | a mid-tier model at medium effort; it runs commands and reads results | build areas, job outputs, `VALIDATION.md`; never source |
+| Units checker | `skills/art-phlex-units/SKILL.md` | a small model; it fills an evidence-cited table against the units proposal | `UNITS.md` only |
 
-Claude Code subagent definitions for the five workers are in `agents/`. `install.sh` links
+Claude Code subagent definitions for the six workers are in `agents/`. `install.sh` links
 them and the skills into another project. Agents for maintaining the kit itself (docs,
 release notes, security audit) are in `maintainers/agents/` and are not installed.
 
@@ -95,7 +96,7 @@ skills/art-phlex-test/        characterization unit tests for the extracted algo
 skills/explain-ste/           ASD-STE100 writing skill, for hand-offs
 skills/dune-pr-disclosure/    AI disclosure trailer for commits and footer for the pull request
 .github/                      pull request template for the kit
-agents/                       Claude Code subagents: extractor, verifier, reviewer, tester, validator
+agents/                       Claude Code subagents: extractor, verifier, reviewer, tester, validator, units
 maintainers/agents/           subagents for maintaining the kit (not installed)
 .claude/settings.json         deny and ask rules for Claude Code sessions in the kit
 install.sh                    link skills and agents into another project

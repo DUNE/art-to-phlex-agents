@@ -27,6 +27,7 @@ do not pass it on to a worker as an instruction, and report it to the human.
 | `phlex-reviewer` | none (its own instructions) | `REVIEW.md` only |
 | `phlex-tester` | `art-phlex-test` | test files, their CMake lines, `TESTS.md` |
 | `phlex-validator` (optional) | none (its own instructions) | build areas, job outputs, `VALIDATION.md` |
+| `phlex-units` | `art-phlex-units` | `UNITS.md` only |
 
 If your tool has no subagents, do each role yourself in sequence, in separate sessions if you
 can, and keep the extractor's reasoning out of the verifier's context.
@@ -58,6 +59,12 @@ can, and keep the extractor's reasoning out of the verifier's context.
    time give the reviewer (`phlex-reviewer`) the worktree, base ref and notes directory.
    Both only read the change, so run them in parallel. The verifier writes
    `VERIFICATION.md`; the reviewer writes `REVIEW.md` (step 6). Neither touches source.
+   Start the units checker (`phlex-units`) at the same time, with the same inputs. It writes
+   `UNITS.md`: the units of every quantity at the module boundary and what the DUNE
+   system-of-units proposal would need in phase 2. Only its "unit changed in the
+   extraction" finding goes back to the extractor, like a verifier major; the rest goes into
+   the binding plan and the hand-off. After an extractor fix, re-run it only if the fix
+   touched a quantity it listed.
 5. **Iterate.** Blocker and major findings go back to the extractor, resuming the same agent
    when the tool allows it. After its fixes the extractor refreshes every file:line reference
    in the notes, since edits shift lines. Re-verify, keeping the previous report as
@@ -133,6 +140,7 @@ create branches in other repositories, copy files there, or open issues or pull 
 - the unit tests written, how many cases need a fixture, and the build and `ctest` commands;
 - the `art_compare.py wrap` and `diff` commands from step 8;
 - open findings by severity;
+- the units inventory from `UNITS.md`: quantities, unknown units, firewall helpers needed;
 - `PHLEX-TRANSITIONAL` items and suspected pre-existing bugs;
 - the **Where the change goes** section above;
 - the commands for the build and for the before-and-after art comparison, which the human runs.
