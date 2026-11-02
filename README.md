@@ -223,9 +223,9 @@ The options are:
 
 - **the Phlex-era repository only** (for example `DUNE/dune-pd-hd`): copy the
   framework-free algorithm and its tests there, and leave the art-era repository unchanged.
-  This is the current leaning.
 - **the art-era repository** (for example `dunereco`): a pull request with the thinner module
-  and the algorithm, so the art module itself uses the extracted code.
+  and the algorithm, so the art module itself uses the extracted code. This is the current
+  leaning for phase 1, since the result still runs in art and is checked against art.
 - **neither yet**: keep the patch and the notes until phase 2.
 
 Until they decide, do not open pull requests from a run. The manager's
@@ -252,7 +252,7 @@ in `agents/`. The manager is your own session, so it uses whatever model you sta
 | Reviewer, tests | `sonnet` (the manager starts it on Sonnet) | sent the SpacePointSolver tests back once, then passed them |
 | Tester | `sonnet`, effort `high` | 25 and 22 traced test values; caught the verifier's arithmetic slip |
 | Validator | `sonnet`, effort `medium` | runs container builds and comparisons; command failures need investigation |
-| Units checker | `haiku`, effort `medium` | new; evidence-cited inventory, not a policy decision. Haiku has not completed a run yet |
+| Units checker | `haiku`, effort `medium` | ADCFilter (fresh run): 14 rows, every unit cited, no phase-1 change, tick period honestly `unknown`; 0.02 USD |
 
 The verifier test (2026-11-02) re-ran blind verifiers on the planted-bug copies: the control
 and the four subtlest slips (log text, `float` literals, a dropped `reserve`, an unconditional
@@ -371,7 +371,21 @@ seconds, excluding earlier setup attempts. The matrix's RootOutput modules requi
 
 Reports and the full patch are local scratch artifacts in `runs/larevt-ADCFilter/`;
 builds, jobs and per-event decisions are in `~/dune-dev/adc-validate/`. The module worktree
-remains uncommitted. The default Haiku units worker has not completed a benchmark.
+remains uncommitted.
+
+### ADCFilter, fresh uninterrupted run (2026-11-02)
+
+A second, fresh headless run on a new worktree at the same base, with all six workers and
+no hand edits: **6.5 minutes and 5.19 USD** at list prices (Opus 4.48, Sonnet 0.69,
+Haiku 0.02). Verifier PASS WITH NOTES (0 blocker, 0 major) and reviewer `ship` in one
+round; 18 characterization cases, test review `ship`. The Haiku units checker wrote a
+14-row `UNITS.md` with file and line evidence and no blocking finding, matching the
+independent Codex inventory above.
+
+Validated with the same harness: SL7 build 63 seconds, `ctest` passes, and the decisions
+for ten events at thirteen thresholds are identical to the original build. Reports are in
+`runs/larevt-ADCFilter-clean/` (local). Small modules cost more per line than the fit
+below predicts (about 4 USD), because reading the kit is a fixed cost.
 
 ## Safety
 

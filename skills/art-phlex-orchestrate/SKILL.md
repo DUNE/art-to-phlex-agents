@@ -123,10 +123,10 @@ until they decide." Under that line give:
 
 - the Phlex-era home from the binding plan (`Phlex-era home` in `MIGRATION_NOTES.md`), or
   the candidates if it is ambiguous, and the `dunecore` dependencies that must move first;
-- **option A, Phlex-era repository only** (the current leaning): the commands that would copy
+- **option A, Phlex-era repository only**: the commands that would copy
   the framework-free algorithm files and their tests into that repository on a new branch
   (`phlex-extract/<Module>`), keeping the relative layout, with commit messages and trailers;
-- **option B, art-era repository**: the commit split (extraction, then tests) with trailers,
+- **option B, art-era repository** (the current leaning for phase 1): the commit split (extraction, then tests) with trailers,
   the branch to push, and the pull request against the base branch, with the footer;
 - **option C, neither yet**: keep `extraction-with-tests.patch` and the notes.
 
