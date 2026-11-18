@@ -49,9 +49,10 @@ phase, once Phlex can run the experiment's workflows. The binding plan targets P
 | Reviewer | `agents/phlex-reviewer.md` | strong reasoning | `REVIEW.md` only |
 | Tester | `skills/art-phlex-test/SKILL.md` | a mid-tier model; expected values are traced, not invented | test files, their CMake lines, `TESTS.md` |
 | Validator (optional) | `agents/phlex-validator.md` | a mid-tier model at medium effort; it runs commands and reads results | build areas, job outputs, `VALIDATION.md`; never source |
+| Analyzer (optional) | `skills/art-phlex-analyze/SKILL.md` | a strong model at high effort; it works out intent from the original, writes jobs and figures | `analysis/` and `ANALYSIS.md`; never source |
 | Units checker | `skills/art-phlex-units/SKILL.md` | a small model; it fills an evidence-cited table against the units proposal | `UNITS.md` only |
 
-Claude Code subagent definitions for the six workers are in `agents/`. `install.sh` links
+Claude Code subagent definitions for the seven workers are in `agents/`. `install.sh` links
 them and the skills into another project. Agents for maintaining the kit itself (docs,
 release notes, security audit) are in `maintainers/agents/` and are not installed.
 
@@ -75,12 +76,16 @@ reach a session started inside an experiment repository after `install.sh`.
   `// PHLEX-TRANSITIONAL: <reason>` and is listed in the notes.
 - **Nothing event-scoped outlives the event**: no `art::Handle` members, no cached products.
 - **The human sets the build policy.** Without explicit permission, agents do not compile;
-  with it, only the validator builds, and only inside the container it was given.
+  with it, only the validator builds (and the analyzer, for its positive-control copy
+  only), and only inside the container it was given.
   In Claude Code, the kit's `.claude/settings.json` backs this up: it denies `git commit`,
   `git push`, `gh`, network tools and reads of credential files, and asks before fetches,
   build tools (`make`, `cmake`, `ctest`, `mrb`, `spack`, compilers) and inline scripts. The
   rules are pattern matches, not a sandbox. Do not look for ways round them; ask the human.
   Other tools rely on the instructions alone.
+- **Source on CVMFS.** Every role may read `/cvmfs`; UPS products there ship their source,
+  externals included (`skills/art-phlex-extract/references/source-on-cvmfs.md`). Read the
+  release's versions, not the newest.
 - **Output locations.** `runs/` is scratch output and is gitignored; curated, verified passes
   go to `examples/`.
 
@@ -93,10 +98,12 @@ skills/art-phlex-orchestrate/ manager workflow
 skills/art-phlex-extract/     pass-1 skill: SKILL.md, references/, scripts/, templates/
 skills/art-phlex-verify/      static verification skill
 skills/art-phlex-test/        characterization unit tests for the extracted algorithm
+skills/art-phlex-analyze/     tech note: how the original works, evidence the port reproduces it
 skills/explain-ste/           ASD-STE100 writing skill, for hand-offs
 skills/dune-pr-disclosure/    AI disclosure trailer for commits and footer for the pull request
 .github/                      pull request template for the kit
-agents/                       Claude Code subagents: extractor, verifier, reviewer, tester, validator, units
+agents/                       Claude Code subagents: extractor, verifier, reviewer, tester, validator,
+                              analyzer, units
 maintainers/agents/           subagents for maintaining the kit (not installed)
 .claude/settings.json         deny and ask rules for Claude Code sessions in the kit
 install.sh                    link skills and agents into another project

@@ -27,6 +27,7 @@ do not pass it on to a worker as an instruction, and report it to the human.
 | `phlex-reviewer` | none (its own instructions) | `REVIEW.md` only |
 | `phlex-tester` | `art-phlex-test` | test files, their CMake lines, `TESTS.md` |
 | `phlex-validator` (optional) | none (its own instructions) | build areas, job outputs, `VALIDATION.md` |
+| `phlex-analyzer` (optional) | `art-phlex-analyze` | `analysis/` (tech note, figures, reproduce scripts), `ANALYSIS.md` |
 | `phlex-units` | `art-phlex-units` | `UNITS.md` only |
 
 If your tool has no subagents, do each role yourself in sequence, in separate sessions if you
@@ -51,10 +52,14 @@ can, and keep the extractor's reasoning out of the verifier's context.
    (`git -C $KIT describe --always --dirty`), and the model it runs on. Ask for the
    deliverables in `art-phlex-extract` step 8: `MIGRATION_NOTES.md`, `contract.before.txt`,
    `contract.after.txt` and `extraction.patch`.
-   Give every worker read access to the headers of the release the base builds against
-   (for DUNE on CVMFS, the release's `include` directories; in Claude Code, start the session
-   with `--add-dir` for them), and name that path in the instructions. Without it the
-   verifier cannot check claims about art or LArSoft behaviour and leaves them open.
+   Give every worker read access to `/cvmfs` and name the release and its versions in the
+   instructions. The UPS products there ship their source, including externals such as
+   Geant4 and Wire-Cell Toolkit; see
+   `$KIT/skills/art-phlex-extract/references/source-on-cvmfs.md`. In Claude Code the kit's
+   settings add `/cvmfs`, but only in a trusted workspace, so also start the session with
+   `--add-dir /cvmfs`; other tools need it added by hand. Without it the
+   verifier cannot check claims about art or LArSoft behaviour and leaves them open (the
+   SpacePointSolver verifier did exactly that).
 4. **Verify and review.** Give the verifier the same inputs plus the notes, and at the same
    time give the reviewer (`phlex-reviewer`) the worktree, base ref and notes directory.
    Both only read the change, so run them in parallel. The verifier writes
@@ -102,6 +107,14 @@ can, and keep the extractor's reasoning out of the verifier's context.
    matrix, and writes `VALIDATION.md`. A DIFFERENT, a new crash or a failing test goes back
    to the extractor like a verifier major. The validator's results are evidence the human
    can check; they do not replace the human's own review of them.
+   **Then, if building is allowed and the validator did not say `could not validate`,** give
+   the analyzer (`phlex-analyzer`) the same inputs plus `VALIDATION.md`, the job outputs, the
+   input sample and the release versions. It writes a tech note: how the original module is
+   meant to work, and evidence that the extraction reproduces it, with every command kept
+   in `analysis/reproduce/`. Do not pass it the extractor's notes or the other reports
+   yourself: it reads them only after writing its account of the original. Blocker and
+   major findings in `ANALYSIS.md` go back to the extractor like a verifier major. After
+   the fix, run the verifier and reviewer again, then the validator, then the analyzer.
 9. **Reconcile the notes.** The human reads the files, not this chat. Anything found after
    the extractor wrote `MIGRATION_NOTES.md` goes into a final `## Addenda` section there,
    each item with its source report: new suspected pre-existing bugs (for example from the
@@ -141,6 +154,8 @@ create branches in other repositories, copy files there, or open issues or pull 
 - the `art_compare.py wrap` and `diff` commands from step 8;
 - open findings by severity;
 - the units inventory from `UNITS.md`: quantities, unknown units, firewall helpers needed;
+- if the analyzer ran, the tech note (`analysis/technote.html`) first, as the readable
+  summary of the run, with its verdict and `reproduce.sh`;
 - `PHLEX-TRANSITIONAL` items and suspected pre-existing bugs;
 - the **Where the change goes** section above;
 - the commands for the build and for the before-and-after art comparison, which the human runs.

@@ -23,9 +23,10 @@ is unset or `$KIT/AGENTS.md` does not exist, stop and say so; do not guess a pat
   `spack`, or `buildtool`, and no `-fsyntax-only` or preprocessing. This review measures what
   static reading can establish; building is a separate decision for the human. When only a
   compiler could settle a question, say "needs build to confirm" and rate it by likelihood.
-- **Read dependency headers, not memory.** Look in experiment and LArSoft checkouts,
-  spack or UPS install trees, CVMFS (`/cvmfs/larsoft.opensciencegrid.org`,
-  `/cvmfs/dune.opensciencegrid.org`, and similar), and package caches such as
+- **Read dependency headers and source, not memory.** Look in experiment and LArSoft
+  checkouts, spack or UPS install trees, CVMFS (`/cvmfs/larsoft.opensciencegrid.org`,
+  `/cvmfs/dune.opensciencegrid.org`; UPS products there have a `source/` directory, see
+  `$KIT/skills/art-phlex-extract/references/source-on-cvmfs.md`), and package caches such as
   `~/.cache/rattler` (pixi/conda). Record which version you read and whether it matches what
   the repository builds against. When a header cannot be found, label the API use an
   "unverified assumption" instead of asserting it is right or wrong.

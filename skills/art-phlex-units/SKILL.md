@@ -49,7 +49,9 @@ when appropriate rather than forcing a conversion.
 ## Inputs
 
 The worktree, the base ref, the notes directory (with `MIGRATION_NOTES.md` and
-`contract.after.txt` if the extractor has run), and the release headers path. Use `$KIT` for
+`contract.after.txt` if the extractor has run), and the release name and versions (headers
+and source are under `/cvmfs`, see
+`$KIT/skills/art-phlex-extract/references/source-on-cvmfs.md`). Use `$KIT` for
 the kit path; if it is unset or `$KIT/AGENTS.md` does not exist, stop and say so.
 
 ## Steps
