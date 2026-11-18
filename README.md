@@ -66,9 +66,10 @@ v0.4.1 disagree, `binding-crosswalk.md` follows the v0.4.1 code and says so.
 | `skills/art-phlex-verify/` | static review of an extraction, without compiling | yes |
 | `skills/art-phlex-units/` | boundary quantities, evidence for their units, and phase-2 actions | yes |
 | `skills/art-phlex-test/` | characterization unit tests for the extracted algorithm | yes |
+| `skills/art-phlex-analyze/` | a tech note: how the original module works, and evidence that the extraction reproduces it | yes |
 | `skills/explain-ste/` | writes hand-off notes in ASD-STE100 style for readers whose first language is not English | yes |
 | `skills/dune-pr-disclosure/` | adds the AI disclosure: a `Generated-by` or `Assisted-by` trailer on each commit and one footer line in the pull request | yes |
-| `agents/` | Claude Code subagents: `phlex-extractor`, `phlex-verifier`, `phlex-reviewer`, `phlex-tester`, `phlex-validator`, `phlex-units` | yes |
+| `agents/` | Claude Code subagents: `phlex-extractor`, `phlex-verifier`, `phlex-reviewer`, `phlex-tester`, `phlex-validator`, `phlex-analyzer`, `phlex-units` | yes |
 | `maintainers/agents/` | subagents for looking after the kit itself: `docs-writer`, `release-notes`, `security-auditor` | no |
 | `.claude/settings.json` | adds `/cvmfs` as a readable directory; denies commits, pushes, `gh`, network tools and reads of credential files; asks before fetches, builds and inline scripts | as `.claude/settings.local.json`, if you have none |
 | `install.sh` | links the skills and agents into another repository | |
@@ -130,7 +131,6 @@ run on the host and use hosted models. Apptainer supplies the experiment environ
 `/cvmfs` is bound into it, and source, build areas and event files stay in the local home
 directory. No GPVM is needed for this workflow.
 
-The SL7 wrapper uses the CVMFS `fermilab/fnal-dev-sl7:latest` image with a clean environment.
 `/cvmfs` is also where the agents find source. The UPS products on the DUNE and LArSoft
 CVMFS repositories each have a `source/` directory, including externals such as Geant4 and
 Wire-Cell Toolkit; the Spack installs have headers but no source. So a session that can read
@@ -140,6 +140,7 @@ workspace you have not trusted, which includes a first headless `claude -p` run.
 `--add-dir /cvmfs` on the command line to be sure. See
 `skills/art-phlex-extract/references/source-on-cvmfs.md`.
 
+The SL7 wrapper uses the CVMFS `fermilab/fnal-dev-sl7:latest` image with a clean environment.
 The EL9 wrapper uses a local `fnal-dev-el9-spack.sif`. Both are in
 `~/github/dune-mpd-local/scripts/` on the development machine. These are existing local
 helpers, not files installed by this kit. Current ADCFilter and EL9 SpacePointSolver build
@@ -179,7 +180,7 @@ even with `--force`, and refuses to follow a symbolic link that leads out of the
 ## How a run works
 
 Your main session is the **manager**. It picks the module, makes a git worktree, and gives
-work to five subagents, and to a sixth if you allow building:
+work to five subagents, and to two more if you allow building:
 
 1. **Extractor** (`phlex-extractor`). Applies `art-phlex-extract` in the worktree and writes
    `runs/<repo>-<Module>/MIGRATION_NOTES.md`.
@@ -193,8 +194,16 @@ work to five subagents, and to a sixth if you allow building:
 5. **Validator** (`phlex-validator`, optional). Only when you allow building: builds the base
    and the extracted version in a container, runs the unit tests and the comparison matrix,
    and writes `VALIDATION.md`. It never edits source.
+6. **Analyzer** (`phlex-analyzer`, optional, after the validator). Writes a tech note
+   (`analysis/technote.html`). Part 1 explains how the original module is meant to work,
+   from its source and from running it, written before it reads the extractor's notes.
+   Part 2 shows with plots, tables and the row-by-row comparison that the extraction
+   reproduces it, and checks that a job reaches every moved code path. Every command, FHiCL
+   file and script goes in `analysis/reproduce/` with a `reproduce.sh`. Its blocker and
+   major findings go back to the extractor. Suggested by Brett Viren. Tried twice on
+   SpacePointSolver; see [Analyzer tests](#analyzer-tests-2026-11-17-and-18).
 
-6. **Units checker** (`phlex-units`). Runs alongside the verifier and reviewer. Writes
+7. **Units checker** (`phlex-units`). Runs alongside the verifier and reviewer. Writes
    `UNITS.md`: every boundary quantity, evidence for its current unit (or `unknown`), the
    applicable proposal decisions D1 to D8, product wrappers and shared conversion helpers.
    Phase 1 changes no units. An extraction that changes units, conversions or numeric types
@@ -261,6 +270,7 @@ in `agents/`. The manager is your own session, so it uses whatever model you sta
 | Reviewer, tests | `sonnet` (the manager starts it on Sonnet) | sent the SpacePointSolver tests back once, then passed them |
 | Tester | `sonnet`, effort `high` | 25 and 22 traced test values; caught the verifier's arithmetic slip |
 | Validator | `sonnet`, effort `medium` | runs container builds and comparisons; command failures need investigation |
+| Analyzer | `opus`, effort `high` | two SpacePointSolver tests: 7.91 USD / 89 min and 9.48 USD / 120 min; found an unreached moved branch and a planted change in the build area |
 | Units checker | `haiku`, effort `medium` | ADCFilter (fresh run): 14 rows, every unit cited, no phase-1 change, tick period honestly `unknown`; 0.02 USD |
 
 The verifier test (2026-11-02) re-ran blind verifiers on the planted-bug copies: the control
@@ -395,6 +405,33 @@ Validated with the same harness: SL7 build 63 seconds, `ctest` passes, and the d
 for ten events at thirteen thresholds are identical to the original build. Reports are in
 `runs/larevt-ADCFilter-clean/` (local). Small modules cost more per line than the fit
 below predicts (about 4 USD), because reading the kit is a fixed cost.
+
+### Analyzer tests (2026-11-17 and 18)
+
+Both runs were headless (`claude -p --agent phlex-analyzer`, Opus 5.5, effort high) on the
+SpacePointSolver extraction, with the SL7 build areas from the hand validation.
+
+- **Test 1, the real extraction** (7.91 USD, 89 min, 117 tool calls). It wrote part 1
+  before reading the extractor's notes, ran 19 configurations in each build (16 from the
+  hand validation and 3 of its own), and found all 17 that run identical row by row in 96
+  branches, the 2 that throw identical, and the old positive control DIFFERENT. New: the
+  two-view branch the extraction changed is reached by no job on FD 1x2x6 (major, needs a
+  two-view sample), and the notes' claim that `Fit: false` writes only `pre` is wrong. With
+  only three verdicts it said `could not analyse`; the skill now has
+  `reproduces on reached paths`.
+- **Test 2, a planted change** (9.48 USD, 120 min, 159 tool calls). The extracted build area
+  was rebuilt with the convergence threshold changed from 1e-3 to 2e-3, and `VALIDATION.md`
+  said only "built". The analyzer ran its own matrix, found DIFFERENT in 65 branches in
+  production and every configuration that iterates more than once, added iteration-capped
+  configurations that stayed identical, and traced the difference to one line in the build
+  area that the worktree does not have. It reported a blocker to the manager, not the
+  extractor, which is correct: the extraction itself was fine. The skill now makes that
+  source check an explicit step, and the validator records each area's source state.
+  (The build area's reflog named the branch `mutant`; the analyzer also found the change by
+  diffing sources.)
+- A headless run stops background shells 10 minutes after its last turn. Test 2's final
+  `reproduce.sh` check was cut off that way; set `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`
+  for analyzer runs.
 
 ## Safety
 

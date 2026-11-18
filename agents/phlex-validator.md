@@ -32,7 +32,9 @@ path; if it is unset or `$KIT/AGENTS.md` does not exist, stop and say so.
 ## Steps
 
 1. Apply `extraction-with-tests.patch` (or `extraction.patch`) to the extracted build area
-   with `git apply --check`, then `git apply`. Build both areas. A build failure is a
+   with `git apply --check`, then `git apply`. Build both areas. Record in `VALIDATION.md`
+   the source state of each area (`git -C <srcs> status --short` and `git diff --stat`
+   against the base), so a later reader can tell that each build is what it claims to be. A build failure is a
    blocker: report the first error with file and line.
 2. Run the unit tests (`ctest -R <test> --output-on-failure`) in the extracted area.
 3. Run every combination in the validation plan in both builds, with the wrappers from
