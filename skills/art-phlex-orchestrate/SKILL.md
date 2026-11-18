@@ -51,10 +51,14 @@ can, and keep the extractor's reasoning out of the verifier's context.
    (`git -C $KIT describe --always --dirty`), and the model it runs on. Ask for the
    deliverables in `art-phlex-extract` step 8: `MIGRATION_NOTES.md`, `contract.before.txt`,
    `contract.after.txt` and `extraction.patch`.
-   Give every worker read access to the headers of the release the base builds against
-   (for DUNE on CVMFS, the release's `include` directories; in Claude Code, start the session
-   with `--add-dir` for them), and name that path in the instructions. Without it the
-   verifier cannot check claims about art or LArSoft behaviour and leaves them open.
+   Give every worker read access to `/cvmfs` and name the release and its versions in the
+   instructions. The UPS products there ship their source, including externals such as
+   Geant4 and Wire-Cell Toolkit; see
+   `$KIT/skills/art-phlex-extract/references/source-on-cvmfs.md`. In Claude Code the kit's
+   settings add `/cvmfs`, but only in a trusted workspace, so also start the session with
+   `--add-dir /cvmfs`; other tools need it added by hand. Without it the
+   verifier cannot check claims about art or LArSoft behaviour and leaves them open (the
+   SpacePointSolver verifier did exactly that).
 4. **Verify and review.** Give the verifier the same inputs plus the notes, and at the same
    time give the reviewer (`phlex-reviewer`) the worktree, base ref and notes directory.
    Both only read the change, so run them in parallel. The verifier writes

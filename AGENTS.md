@@ -83,6 +83,9 @@ reach a session started inside an experiment repository after `install.sh`.
   Other tools rely on the instructions alone.
 - **Output locations.** `runs/` is scratch output and is gitignored; curated, verified passes
   go to `examples/`.
+- **Source on CVMFS.** Every role may read `/cvmfs`; UPS products there ship their source,
+  externals included (`skills/art-phlex-extract/references/source-on-cvmfs.md`). Read the
+  release's versions, not the newest.
 
 ## Layout
 

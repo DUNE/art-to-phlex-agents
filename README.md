@@ -70,7 +70,7 @@ v0.4.1 disagree, `binding-crosswalk.md` follows the v0.4.1 code and says so.
 | `skills/dune-pr-disclosure/` | adds the AI disclosure: a `Generated-by` or `Assisted-by` trailer on each commit and one footer line in the pull request | yes |
 | `agents/` | Claude Code subagents: `phlex-extractor`, `phlex-verifier`, `phlex-reviewer`, `phlex-tester`, `phlex-validator`, `phlex-units` | yes |
 | `maintainers/agents/` | subagents for looking after the kit itself: `docs-writer`, `release-notes`, `security-auditor` | no |
-| `.claude/settings.json` | denies commits, pushes, `gh`, network tools and reads of credential files; asks before fetches, builds and inline scripts | as `.claude/settings.local.json`, if you have none |
+| `.claude/settings.json` | adds `/cvmfs` as a readable directory; denies commits, pushes, `gh`, network tools and reads of credential files; asks before fetches, builds and inline scripts | as `.claude/settings.local.json`, if you have none |
 | `install.sh` | links the skills and agents into another repository | |
 | `examples/` | finished, verified passes on real modules | |
 
@@ -131,6 +131,15 @@ run on the host and use hosted models. Apptainer supplies the experiment environ
 directory. No GPVM is needed for this workflow.
 
 The SL7 wrapper uses the CVMFS `fermilab/fnal-dev-sl7:latest` image with a clean environment.
+`/cvmfs` is also where the agents find source. The UPS products on the DUNE and LArSoft
+CVMFS repositories each have a `source/` directory, including externals such as Geant4 and
+Wire-Cell Toolkit; the Spack installs have headers but no source. So a session that can read
+`/cvmfs` has most of the code it needs without network access. The kit's settings add
+`/cvmfs` for Claude Code, but Claude Code ignores that entry (and the allow rule) in a
+workspace you have not trusted, which includes a first headless `claude -p` run. Pass
+`--add-dir /cvmfs` on the command line to be sure. See
+`skills/art-phlex-extract/references/source-on-cvmfs.md`.
+
 The EL9 wrapper uses a local `fnal-dev-el9-spack.sif`. Both are in
 `~/github/dune-mpd-local/scripts/` on the development machine. These are existing local
 helpers, not files installed by this kit. Current ADCFilter and EL9 SpacePointSolver build

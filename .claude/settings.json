@@ -4,6 +4,12 @@
     "pr": ""
   },
   "permissions": {
+    "additionalDirectories": [
+      "/cvmfs"
+    ],
+    "allow": [
+      "Read(//cvmfs/**)"
+    ],
     "deny": [
       "Bash(git commit:*)",
       "Bash(git push:*)",
