@@ -45,7 +45,12 @@ path; if it is unset or `$KIT/AGENTS.md` does not exist, stop and say so.
    combination change the counts from production?), repeatability (base twice), and one
    positive control. For the positive control, change one constant in a copy of the
    extracted area, never in the worktree, and confirm the comparison reports DIFFERENT.
-6. Before you report IDENTICAL, read the range column of each `summary.md`. Values that are
+6. Check the contract with other modules: for the production job, make the stage graph
+   with each build (`art_graph.py stage`, with the `--debug-config` dump and the
+   `eventdump` lists of the input and of a one-event output) and run `art_graph.py diff`.
+   A DIFFERENT is a blocker, like a DIFFERENT row by row. Add `art_graph.py impact` for the
+   module to `VALIDATION.md`. See `$KIT/skills/art-phlex-extract/references/chain-contract.md`.
+7. Before you report IDENTICAL, read the range column of each `summary.md`. Values that are
    not physical (for example near 1e18) mean a field reads a pointer, not a value.
 
 ## Output

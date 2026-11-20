@@ -101,6 +101,12 @@ can, and keep the extractor's reasoning out of the verifier's context.
    `$KIT/skills/art-phlex-extract/scripts/`. Do not give `art_compare.py diff` for art
    event files: it cannot read real art products. Include the controls from the plan
    (rerun, coverage, crashes, repeatability, positive control).
+   Add the contract check with other modules: `art_graph.py stage` for the production job
+   in each build, then `art_graph.py diff`, and `art_graph.py impact <label>` over the
+   production chain (for example reco1 then reco2), which lists every downstream reader
+   (`references/chain-contract.md` in `art-phlex-extract`). If you already have those
+   dumps before step 3, give the `impact` report to the extractor: it is the list of
+   products, instances and labels the extraction must keep.
    **Optional, only if the human allows building:** give the validator (`phlex-validator`)
    the worktree, base ref, notes directory, the build area for each version and the
    container command. It builds both versions, runs the unit tests and the comparison
