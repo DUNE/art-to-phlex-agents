@@ -235,6 +235,7 @@ and decisions that need a human.
 | writing the binding plan | `references/binding-crosswalk.md` |
 | where DUNE code goes after phase 1 (`dunecore` to `dune-core` and the other new repositories) | `references/dune-repo-map.md` |
 | reading art, LArSoft, Geant4 or Wire-Cell source and headers of the release's versions | `references/source-on-cvmfs.md` |
+| what other modules and later stages read from this module (`art_graph.py impact`) | `references/chain-contract.md` |
 
 Guide source: phlex-examples `migration/doc` at commit 5df307b (guide v0.1.alpha,
 2026-09-09), <https://framework-r-d.github.io/phlex-examples/>. When the guide and these

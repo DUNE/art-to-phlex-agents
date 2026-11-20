@@ -93,6 +93,11 @@ The scripts need Python 3.8 or newer and nothing outside the standard library:
   object or pair, in stored order), and `art_physics.py compare` checks two such files row
   by row and draws before-and-after histograms with ratio panels, KS and chi2 tests. Run it
   with PyROOT from the experiment environment, where `lar` runs.
+- `art_graph.py stage` builds the producer and consumer graph of one job from its
+  `--debug-config` dump and `eventdump` product lists. `impact LABEL` lists what downstream
+  modules and later stages read from one module, `check` reports wiring errors, and `diff`
+  compares the graph of the base and the extracted build (exit 1 if different). See
+  `skills/art-phlex-extract/references/chain-contract.md`.
 
 ## Where to run it
 
